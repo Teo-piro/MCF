@@ -39,6 +39,7 @@ def get_connection() -> sqlite3.Connection:
 CLASSIFICAZIONE_REGOLE: list[tuple[str, str, str]] = [
     # prefisso codice           tipo (micro)            macro
     # --- Video / ottiche ---
+    ("ST-",         "Sala Studio",            "Studio"),
     ("VC-",         "Videocamera",            "Video"),
     ("OB-",         "Obiettivo",              "Video"),
     ("BT-",         "Batteria",               "Video"),
@@ -355,6 +356,14 @@ def init_db(forza_reimport: bool = False) -> None:
         cur.execute("DELETE FROM collaboratori")
         n = _importa_collaboratori(cur)
         print(f"  → Importati {n} collaboratori da CSV.")
+
+    # Assicura che la Sala Studio esista sempre
+    cur.execute("SELECT COUNT(*) FROM attrezzatura WHERE codice='ST-STUDIO-001'")
+    if cur.fetchone()[0] == 0:
+        cur.execute(
+            "INSERT OR IGNORE INTO attrezzatura (codice, nome, tipo, macro, stato) VALUES (?,?,?,?,?)",
+            ("ST-STUDIO-001", "Sala Studio Flatmates", "Sala Studio", "Studio", "Disponibile"),
+        )
 
     cur.execute("SELECT COUNT(*) FROM attrezzatura")
     if forza_reimport or cur.fetchone()[0] == 0:

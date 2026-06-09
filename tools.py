@@ -184,36 +184,125 @@ def calcola_attrezzatura(numero_persone: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 4 – Prenotazione studio (mock → in futuro Google Calendar)
+# Tool 4 – Prenotazione studio
 # ---------------------------------------------------------------------------
 
-def prenota_studio_mock(data: str, ora: str) -> str:
+def _correggi_anno(data: str) -> str:
+    """Se il LLM passa un anno passato, sostituisce con l'anno corrente."""
+    from datetime import date as _date
+    if not data:
+        return data
+    try:
+        parts = data.split("-")
+        if len(parts) == 3:
+            anno = int(parts[0])
+            oggi = _date.today()
+            if anno < oggi.year:
+                parts[0] = str(oggi.year)
+                return "-".join(parts)
+    except Exception:
+        pass
+    return data
+
+
+def verifica_disponibilita_studio(
+    data_inizio: str,
+    data_fine: str = "",
+    ora_inizio: str = "",
+    ora_fine: str = "",
+) -> str:
     """
-    Prenota lo studio di registrazione per una data e un'ora specifiche.
-    Attualmente salva la prenotazione in un file locale (prenotazioni.txt).
-    In futuro sarà collegato a Google Calendar.
-    Usa questo strumento quando il cliente vuole riservare lo studio,
-    pianificare una sessione di riprese o bloccare un orario.
+    Verifica se la Sala Studio è disponibile nel periodo indicato.
+    Usa SEMPRE questo strumento PRIMA di prenota_sala_studio.
 
     Args:
-        data: Data nel formato GG/MM/AAAA (es. '20/07/2025').
-        ora:  Ora di inizio nel formato HH:MM (es. '10:00').
+        data_inizio: Data inizio nel formato AAAA-MM-GG (es. '2025-07-20').
+        data_fine:   Data fine (opzionale, default = stesso giorno).
+        ora_inizio:  Ora inizio HH:MM (es. '09:00').
+        ora_fine:    Ora fine HH:MM (es. '18:00').
 
     Returns:
-        Conferma della prenotazione o messaggio di errore.
+        Messaggio con disponibilità e, se occupata, chi l'ha prenotata.
     """
+    data_inizio = _correggi_anno(data_inizio)
+    data_fine   = _correggi_anno(data_fine) if data_fine else data_inizio
     try:
-        riga = f"[PRENOTAZIONE] Studio — Data: {data} | Ora: {ora}\n"
-        with open(PRENOTAZIONI_FILE, "a", encoding="utf-8") as f:
-            f.write(riga)
-        return (
-            f"✅ Studio prenotato!\n"
-            f"   📅 Data: {data}  🕐 Ora: {ora}\n"
-            f"   La prenotazione è stata registrata.\n"
-            f"   (In produzione questa azione aggiornerà Google Calendar.)"
+        result = P.pezzi_disponibili(
+            "Sala Studio", data_inizio, data_fine,
+            ora_inizio or None, ora_fine or None
         )
+        if result["disponibili"]:
+            msg = f"✅ Sala Studio LIBERA per {data_inizio}"
+            if data_fine and data_fine != data_inizio:
+                msg += f" → {data_fine}"
+            if ora_inizio:
+                msg += f" dalle {ora_inizio}" + (f" alle {ora_fine}" if ora_fine else "")
+            return msg
+        else:
+            occ = result["occupati"][0] if result["occupati"] else {}
+            return (
+                f"❌ Sala Studio OCCUPATA per quel periodo.\n"
+                f"   Progetto: {occ.get('progetto','—')}\n"
+                f"   Prenotato da: {occ.get('prenotato_da','—')}\n"
+                f"   Dal {occ.get('data_inizio','?')} al {occ.get('data_fine','?')}"
+            )
     except Exception as e:
-        return f"❌ Errore durante la prenotazione: {e}"
+        return f"❌ Errore verifica: {e}"
+
+
+def prenota_sala_studio(
+    data_inizio: str,
+    data_fine: str = "",
+    ora_inizio: str = "",
+    ora_fine: str = "",
+    prenotato_da: str = "",
+    progetto: str = "",
+) -> str:
+    """
+    Prenota la Sala Studio nel database (prenotazione reale, non mock).
+    IMPORTANTE: chiama prima verifica_disponibilita_studio. Se occupata, NON procedere.
+    Richiedi sempre: prenotato_da e progetto all'utente prima di chiamare questo tool.
+
+    Args:
+        data_inizio:  Data inizio AAAA-MM-GG (es. '2025-07-20').
+        data_fine:    Data fine (opzionale, default = stesso giorno).
+        ora_inizio:   Ora inizio HH:MM (es. '09:00').
+        ora_fine:     Ora fine HH:MM (es. '18:00').
+        prenotato_da: Nome di chi prenota (obbligatorio).
+        progetto:     Nome del progetto (obbligatorio).
+
+    Returns:
+        Conferma con gruppo_id o messaggio di errore.
+    """
+    if not prenotato_da or not progetto:
+        return "❌ Devi specificare sia 'prenotato_da' che 'progetto' per completare la prenotazione."
+    if not data_inizio:
+        return "❌ Specifica almeno data_inizio nel formato AAAA-MM-GG."
+    data_inizio = _correggi_anno(data_inizio)
+    data_fine   = _correggi_anno(data_fine) if data_fine else data_inizio
+    try:
+        risultato = P.crea_prenotazione_multipla(
+            articoli=[{"tipo": "Sala Studio", "quantita": 1}],
+            data_inizio=data_inizio,
+            data_fine=data_fine,
+            prenotato_da=prenotato_da,
+            progetto=progetto,
+            ora_inizio=ora_inizio or None,
+            ora_fine=ora_fine or None,
+        )
+        msg = (
+            f"✅ Sala Studio prenotata!\n"
+            f"   📅 {data_inizio}" + (f" → {data_fine}" if data_fine and data_fine != data_inizio else "") + "\n"
+        )
+        if ora_inizio:
+            msg += f"   🕐 {ora_inizio}" + (f" – {ora_fine}" if ora_fine else "") + "\n"
+        msg += f"   👤 {prenotato_da}  |  📁 {progetto}\n"
+        msg += f"   ID prenotazione: {risultato['gruppo_id']}"
+        return msg
+    except P.PrenotazioneError as e:
+        return f"❌ Impossibile prenotare: {e}"
+    except Exception as e:
+        return f"❌ Errore: {e}"
 
 
 # ---------------------------------------------------------------------------
@@ -803,7 +892,8 @@ TOOL_FUNCTIONS: dict[str, callable] = {
     "cerca_collaboratore": cerca_collaboratore,
     "cerca_tariffe":       cerca_tariffe,
     "calcola_attrezzatura": calcola_attrezzatura,
-    "prenota_studio_mock": prenota_studio_mock,
+    "verifica_disponibilita_studio": verifica_disponibilita_studio,
+    "prenota_sala_studio": prenota_sala_studio,
     "cerca_inventario": cerca_attrezzatura,
     "conta_attrezzatura_per_tipo": conta_attrezzatura_per_tipo,
     "riepilogo_inventario": riepilogo_inventario,
@@ -1057,18 +1147,44 @@ TOOLS_SCHEMA: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "prenota_studio_mock",
+            "name": "verifica_disponibilita_studio",
             "description": (
-                "Prenota lo studio di registrazione per una data e un'ora specifiche. "
-                "Simula la prenotazione (collegamento a Google Calendar in sviluppo)."
+                "Verifica se la Sala Studio Flatmates è disponibile in un dato periodo. "
+                "DEVI chiamare questo tool PRIMA di prenota_sala_studio. "
+                "Se la sala è occupata, informa l'utente e non procedere con la prenotazione."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "data": {"type": "string", "description": "Data nel formato GG/MM/AAAA."},
-                    "ora":  {"type": "string", "description": "Ora di inizio nel formato HH:MM."},
+                    "data_inizio": {"type": "string", "description": "Data inizio formato AAAA-MM-GG (es. '2025-07-20')."},
+                    "data_fine":   {"type": "string", "description": "Data fine formato AAAA-MM-GG (opzionale, default = stesso giorno)."},
+                    "ora_inizio":  {"type": "string", "description": "Ora inizio HH:MM (es. '09:00')."},
+                    "ora_fine":    {"type": "string", "description": "Ora fine HH:MM (es. '18:00')."},
                 },
-                "required": ["data", "ora"],
+                "required": ["data_inizio"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prenota_sala_studio",
+            "description": (
+                "Prenota la Sala Studio Flatmates nel database (prenotazione reale). "
+                "Chiama SEMPRE verifica_disponibilita_studio prima. "
+                "Richiedi all'utente: prenotato_da e progetto se non forniti."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "data_inizio":  {"type": "string", "description": "Data inizio AAAA-MM-GG."},
+                    "data_fine":    {"type": "string", "description": "Data fine AAAA-MM-GG (opzionale)."},
+                    "ora_inizio":   {"type": "string", "description": "Ora inizio HH:MM."},
+                    "ora_fine":     {"type": "string", "description": "Ora fine HH:MM."},
+                    "prenotato_da": {"type": "string", "description": "Nome di chi prenota (obbligatorio)."},
+                    "progetto":     {"type": "string", "description": "Nome del progetto (obbligatorio)."},
+                },
+                "required": ["data_inizio", "prenotato_da", "progetto"],
             },
         },
     },

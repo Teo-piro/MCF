@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prenotazione Studio — Aura</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
+<link rel="stylesheet" href="/aura.css">
+<style>
+  #aura-main{display:flex;flex-direction:column;gap:var(--sp-6);padding:var(--sp-6);overflow:auto}
+
+  .section-title{font-family:var(--font-display);font-weight:700;font-size:24px;margin-bottom:var(--sp-4)}
+
+  /* Stato studio */
+  .studio-stato{
+    display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-5);
+    background:rgba(255,255,255,.06);border:1px solid var(--glass-border);border-radius:var(--r-md);
+    margin-bottom:var(--sp-4);
+  }
+  .stato-dot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+  .stato-dot.libera{background:#2ECC71;box-shadow:0 0 8px #2ECC71}
+  .stato-dot.occupata{background:var(--color-error);box-shadow:0 0 8px var(--color-error)}
+  .stato-dot.caricamento{background:#aaa;animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .stato-testo{font-weight:600;font-size:14px}
+  .stato-sub{font-size:12px;color:rgba(255,255,255,.55);margin-top:2px}
+
+  /* Form */
+  .form-row{display:flex;gap:var(--sp-3);margin-bottom:var(--sp-4)}
+  .form-row>div{flex:1}
+  .form-label{display:block;font-size:12px;color:var(--text-on-dark-muted);margin:var(--sp-2) 0 6px;text-transform:uppercase;letter-spacing:.3px}
+  .form-label.required::after{content:" *";color:var(--color-error)}
+
+  /* Calendario */
+  .cal-wrap{background:rgba(255,255,255,.06);border:1px solid var(--glass-border);border-radius:var(--r-md);padding:var(--sp-4)}
+  .cal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-4)}
+  .cal-month{font-family:var(--font-display);font-size:16px;font-weight:700;color:#fff;text-transform:capitalize}
+  .cal-nav-btn{background:none;border:1px solid var(--glass-border);border-radius:var(--r-pill);color:#fff;cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;transition:background .15s}
+  .cal-nav-btn:hover{background:var(--glass-fill)}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cal-dow{text-align:center;font-size:11px;color:rgba(255,255,255,.5);padding:4px 0;text-transform:uppercase;letter-spacing:.1em}
+  .cal-cell{min-height:56px;background:rgba(255,255,255,.03);border-radius:var(--r-sm);padding:4px;transition:background .15s;position:relative}
+  .cal-cell:hover{background:rgba(255,255,255,.07)}
+  .cal-cell.today .cal-day-num{background:var(--color-primary);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+  .cal-cell.empty{background:transparent}
+  .cal-day-num{font-size:12px;color:#fff;line-height:1;margin-bottom:3px;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+  .cal-bar{font-size:9px;border-radius:2px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;background:var(--color-accent);margin-top:2px;cursor:pointer;transition:opacity .15s}
+  .cal-bar:hover{opacity:.8}
+
+  /* Prenotazioni list */
+  .pren-list{display:flex;flex-direction:column;gap:var(--sp-3)}
+  .pren-card{background:rgba(255,255,255,.06);border:1px solid var(--glass-border);border-radius:var(--r-md);padding:var(--sp-4);transition:background .15s}
+  .pren-card:hover{background:rgba(255,255,255,.09)}
+  .pren-project{font-weight:700;font-size:15px;color:#fff}
+  .pren-who{font-size:12px;color:rgba(255,255,255,.6);margin-top:2px}
+  .pren-dates{display:flex;gap:6px;align-items:center;margin-top:var(--sp-3)}
+  .pren-date-pill{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--r-pill);padding:3px 10px;font-size:12px;color:#fff;font-family:var(--font-display)}
+  .pren-footer{margin-top:var(--sp-3);display:flex;justify-content:flex-end}
+  .btn-cancella{background:rgba(196,51,51,.2);border:1px solid rgba(196,51,51,.4);color:#ff9090;border-radius:var(--r-pill);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+  .btn-cancella:hover{background:rgba(196,51,51,.4)}
+
+  /* Modale */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(22,34,106,.65);display:none;z-index:100;align-items:center;justify-content:center}
+  .modal-backdrop.show{display:flex}
+  .modal-box{background:#1a1a24;border:1px solid var(--glass-border);border-radius:var(--r-lg);padding:var(--sp-6);max-width:440px;width:90%;box-shadow:var(--shadow-card)}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--sp-3);margin-bottom:var(--sp-4)}
+  .modal-title{font-size:20px;font-weight:600}
+  .modal-close{background:none;border:none;color:#999;font-size:24px;cursor:pointer;padding:0}
+  .modal-close:hover{color:#fff}
+  .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);margin:var(--sp-4) 0}
+  .modal-field{display:flex;flex-direction:column}
+  .modal-label{font-size:11px;color:var(--text-on-dark-muted);text-transform:uppercase;margin-bottom:4px}
+  .modal-value{font-size:14px;color:#fff}
+</style>
+</head>
+<body>
+<div class="aura-bg"></div>
+<div class="app" id="aura-shell"></div>
+
+<script src="/aura.js"></script>
+<script>
+  auraShell({ active: 'prenotazioni' });
+
+  const main = document.getElementById('aura-main');
+  main.innerHTML = `
+    <div>
+      <h2 class="section-title">Prenotazione Studio</h2>
+
+      <div class="studio-stato" id="stato-wrap">
+        <div class="stato-dot caricamento" id="stato-dot"></div>
+        <div>
+          <div class="stato-testo" id="stato-testo">Verifica disponibilità…</div>
+          <div class="stato-sub" id="stato-sub"></div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label class="form-label required">Data inizio</label>
+          <input class="input" id="f-dal" type="text" placeholder="Seleziona data…" />
+        </div>
+        <div>
+          <label class="form-label">Data fine</label>
+          <input class="input" id="f-al" type="text" placeholder="Stessa data" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label class="form-label">Ora inizio</label>
+          <select class="select" id="f-oin">
+            <option value="">— nessuna —</option>
+            <option value="06:00">06:00</option><option value="07:00">07:00</option>
+            <option value="08:00">08:00</option><option value="09:00">09:00</option>
+            <option value="10:00">10:00</option><option value="11:00">11:00</option>
+            <option value="12:00">12:00</option><option value="13:00">13:00</option>
+            <option value="14:00">14:00</option><option value="15:00">15:00</option>
+            <option value="16:00">16:00</option><option value="17:00">17:00</option>
+            <option value="18:00">18:00</option><option value="19:00">19:00</option>
+            <option value="20:00">20:00</option><option value="21:00">21:00</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Ora fine</label>
+          <select class="select" id="f-ofin">
+            <option value="">— nessuna —</option>
+            <option value="07:00">07:00</option><option value="08:00">08:00</option>
+            <option value="09:00">09:00</option><option value="10:00">10:00</option>
+            <option value="11:00">11:00</option><option value="12:00">12:00</option>
+            <option value="13:00">13:00</option><option value="14:00">14:00</option>
+            <option value="15:00">15:00</option><option value="16:00">16:00</option>
+            <option value="17:00">17:00</option><option value="18:00">18:00</option>
+            <option value="19:00">19:00</option><option value="20:00">20:00</option>
+            <option value="21:00">21:00</option><option value="22:00">22:00</option>
+            <option value="23:00">23:00</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label class="form-label required">Chi prenota</label>
+          <input class="input" id="f-chi" placeholder="Es. Matteo" />
+        </div>
+        <div>
+          <label class="form-label required">Progetto</label>
+          <input class="input" id="f-prog" placeholder="Es. Podcast Ep.5" />
+        </div>
+      </div>
+
+      <div id="avviso"></div>
+      <div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4)">
+        <button class="btn btn-ghost" onclick="verificaStudio()">Verifica</button>
+        <button class="btn btn-primary" id="btn-prenota" onclick="prenotaStudio()">Prenota</button>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="section-title">Calendario Studio</h2>
+      <div class="cal-wrap">
+        <div class="cal-header">
+          <button class="cal-nav-btn" onclick="calMese(-1)">‹</button>
+          <div class="cal-month" id="cal-month-label"></div>
+          <button class="cal-nav-btn" onclick="calMese(+1)">›</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="section-title">Tutte le prenotazioni studio</h2>
+      <div class="pren-list" id="lista-pren"></div>
+    </div>
+  `;
+
+  const API = "";
+  let prenotazioni = [];
+  let calAnno = new Date().getFullYear(), calMeseIdx = new Date().getMonth();
+  const MESI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const DOW_IT = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+
+  // --- Datepicker ---
+  const today = new Date();
+  const fpDal = flatpickr('#f-dal', {locale:'it', dateFormat:'d/m/Y', defaultDate:today, minDate:today, onChange:()=>aggiornaStato()});
+  const fpAl  = flatpickr('#f-al',  {locale:'it', dateFormat:'d/m/Y', defaultDate:today, minDate:today});
+  ['f-oin','f-ofin'].forEach(id => document.getElementById(id).addEventListener('change', aggiornaStato));
+
+  // --- Helpers ---
+  function formatDate(s){ if(!s) return '—'; const [y,m,d]=s.split('-'); return `${d}/${m}/${y}`; }
+
+  function fpToISO(fpInstance){
+    if(!fpInstance.selectedDates[0]) return '';
+    const d = fpInstance.selectedDates[0];
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  // --- Verifica disponibilità live ---
+  let lastVerifica = 0;
+  async function aggiornaStato(){
+    const dal = fpToISO(fpDal);
+    if(!dal){ setStato('neutro','Seleziona una data inizio',''); return; }
+    const al  = fpToISO(fpAl) || dal;
+    const oin = document.getElementById('f-oin').value;
+    const ofin = document.getElementById('f-ofin').value;
+    const seq = ++lastVerifica;
+    setStato('caricamento','Verifico disponibilità…','');
+    try{
+      const qs = new URLSearchParams({data_inizio:dal,data_fine:al,ora_inizio:oin,ora_fine:ofin});
+      const d = await fetch(API+'/api/studio/disponibilita?'+qs).then(r=>r.json());
+      if(seq !== lastVerifica) return;
+      if(d.disponibili && d.disponibili.length > 0){
+        setStato('libera','Sala Studio disponibile',`${formatDate(dal)}${al!==dal?'→'+formatDate(al):''}`);
+        document.getElementById('btn-prenota').disabled = false;
+      } else {
+        const occ = d.occupati?.[0] || {};
+        setStato('occupata','Sala Studio occupata',`Progetto: ${occ.progetto||'—'} (${formatDate(occ.data_inizio)}→${formatDate(occ.data_fine)})`);
+        document.getElementById('btn-prenota').disabled = true;
+      }
+    }catch(e){ if(seq===lastVerifica) setStato('neutro','Errore verifica',''); }
+  }
+
+  function setStato(tipo, testo, sub){
+    const dot  = document.getElementById('stato-dot');
+    const t    = document.getElementById('stato-testo');
+    const s    = document.getElementById('stato-sub');
+    dot.className = `stato-dot ${tipo}`;
+    t.textContent = testo;
+    s.textContent = sub;
+  }
+
+  async function verificaStudio(){
+    const dal = fpToISO(fpDal);
+    if(!dal){ alert('Seleziona una data inizio'); return; }
+    await aggiornaStato();
+  }
+
+  async function prenotaStudio(){
+    const dal  = fpToISO(fpDal);
+    const al   = fpToISO(fpAl) || dal;
+    const chi  = document.getElementById('f-chi').value.trim();
+    const prog = document.getElementById('f-prog').value.trim();
+    const oin  = document.getElementById('f-oin').value;
+    const ofin = document.getElementById('f-ofin').value;
+    const err  = [];
+    if(!dal)  err.push('Data inizio obbligatoria');
+    if(!chi)  err.push('Chi prenota obbligatorio');
+    if(!prog) err.push('Progetto obbligatorio');
+    if(err.length){ alert(err.join('\n')); return; }
+
+    try{
+      const r = await fetch(API+'/api/studio/prenotazioni',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({data_inizio:dal,data_fine:al,ora_inizio:oin,ora_fine:ofin,prenotato_da:chi,progetto:prog})
+      });
+      const data = await r.json();
+      if(!r.ok) throw new Error(data.detail);
+      alert(`✅ Studio prenotato!\nID: ${data.gruppo_id}`);
+      document.getElementById('f-chi').value = '';
+      document.getElementById('f-prog').value = '';
+      await carica();
+    }catch(e){ alert('Errore: '+e.message); }
+  }
+
+  async function cancella(gid){
+    try{
+      const r = await fetch(API+'/api/prenotazioni/'+gid,{method:'DELETE'});
+      if(!r.ok) throw new Error((await r.json()).detail);
+      await carica();
+    }catch(e){ alert('Errore: '+e.message); }
+  }
+
+  // --- Calendario ---
+  function calMese(delta){
+    calMeseIdx += delta;
+    if(calMeseIdx>11){calMeseIdx=0;calAnno++;}
+    if(calMeseIdx<0){calMeseIdx=11;calAnno--;}
+    renderCalendario();
+  }
+
+  function renderCalendario(){
+    const label = document.getElementById('cal-month-label');
+    const grid  = document.getElementById('cal-grid');
+    if(!label||!grid) return;
+    label.textContent = `${MESI_IT[calMeseIdx]} ${calAnno}`;
+    let html = DOW_IT.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+    const primoGiorno = new Date(calAnno, calMeseIdx, 1);
+    let offset = (primoGiorno.getDay()+6)%7;
+    const giorniMese = new Date(calAnno, calMeseIdx+1, 0).getDate();
+    const oggi = new Date();
+    for(let i=0;i<offset;i++) html+=`<div class="cal-cell empty"></div>`;
+    for(let g=1;g<=giorniMese;g++){
+      const isToday = new Date(calAnno,calMeseIdx,g).toDateString()===oggi.toDateString();
+      const cellISO = `${calAnno}-${String(calMeseIdx+1).padStart(2,'0')}-${String(g).padStart(2,'0')}`;
+      const bars = prenotazioni.filter(p=>{
+        const da = (p.data_inizio||'').slice(0,10);
+        const al = (p.data_fine||'').slice(0,10)||da;
+        return da && cellISO>=da && cellISO<=al;
+      }).map(p=>`<div class="cal-bar" onclick="apriDettaglio('${p.gruppo_id}')">${p.progetto||p.prenotato_da||'Studio'}</div>`).join('');
+      html+=`<div class="cal-cell${isToday?' today':''}">
+        <div class="cal-day-num">${g}</div>${bars}
+      </div>`;
+    }
+    grid.innerHTML = html;
+  }
+
+  // --- Lista prenotazioni ---
+  function renderLista(){
+    const cont = document.getElementById('lista-pren');
+    if(!prenotazioni.length){
+      cont.innerHTML='<div style="color:rgba(255,255,255,.5);font-size:13px;padding:var(--sp-4)">Nessuna prenotazione studio ancora.</div>';
+      return;
+    }
+    cont.innerHTML = prenotazioni.map(p=>{
+      const dI=formatDate(p.data_inizio), dF=formatDate(p.data_fine);
+      const orario = p.ora_inizio ? `· ${p.ora_inizio}${p.ora_fine?' – '+p.ora_fine:''}` : '';
+      return `<div class="pren-card">
+        <div class="pren-project">${p.progetto||'Senza nome'}</div>
+        <div class="pren-who">${p.prenotato_da||''} ${orario}</div>
+        <div class="pren-dates">
+          <span class="pren-date-pill">${dI}</span>
+          ${p.data_fine&&p.data_fine!==p.data_inizio?`<span style="color:rgba(255,255,255,.4)">→</span><span class="pren-date-pill">${dF}</span>`:''}
+        </div>
+        <div class="pren-footer">
+          <button class="btn-cancella" onclick="if(confirm('Cancellare?')) cancella('${p.gruppo_id}')">Cancella</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function apriDettaglio(gid){
+    const p = prenotazioni.find(x=>x.gruppo_id===gid);
+    if(!p) return;
+    const modal = document.createElement('div');
+    modal.className = 'modal-backdrop show';
+    modal.innerHTML=`
+      <div class="modal-box">
+        <div style="height:4px;background:var(--color-accent);border-radius:4px 4px 0 0;margin:-24px -24px 20px"></div>
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">${p.progetto||'Prenotazione Studio'}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.5);margin-top:3px">Prenotato da ${p.prenotato_da||'—'}</div>
+          </div>
+          <button class="modal-close" onclick="this.closest('.modal-backdrop').remove()">×</button>
+        </div>
+        <div class="modal-grid">
+          <div class="modal-field"><div class="modal-label">Data inizio</div><div class="modal-value">${formatDate(p.data_inizio)}</div></div>
+          <div class="modal-field"><div class="modal-label">Data fine</div><div class="modal-value">${formatDate(p.data_fine)}</div></div>
+          <div class="modal-field"><div class="modal-label">Ora inizio</div><div class="modal-value">${p.ora_inizio||'—'}</div></div>
+          <div class="modal-field"><div class="modal-label">Ora fine</div><div class="modal-value">${p.ora_fine||'—'}</div></div>
+        </div>
+        <div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-4)">
+          <button class="btn btn-ghost" onclick="this.closest('.modal-backdrop').remove()">Chiudi</button>
+          <button class="btn-cancella" onclick="if(confirm('Cancellare?')){cancella('${p.gruppo_id}');this.closest('.modal-backdrop').remove()}">Cancella</button>
+        </div>
+      </div>`;
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+    document.body.appendChild(modal);
+  }
+
+  // --- Caricamento ---
+  async function carica(){
+    try{
+      const d = await fetch(API+'/api/studio/prenotazioni').then(r=>r.json());
+      prenotazioni = d.data || [];
+      // Auto-naviga al mese della prossima prenotazione futura se il mese corrente è vuoto
+      autoNavMese();
+      renderLista();
+      renderCalendario();
+      aggiornaStato();
+    }catch(e){ console.error(e); }
+  }
+
+  function autoNavMese(){
+    const oggi = new Date();
+    const meseCorrISO = `${calAnno}-${String(calMeseIdx+1).padStart(2,'0')}`;
+    const haMeseCorrente = prenotazioni.some(p => (p.data_inizio||'').startsWith(meseCorrISO));
+    if(!haMeseCorrente && prenotazioni.length){
+      // Trova la prenotazione più vicina (passata o futura) al mese corrente
+      const sorted = prenotazioni
+        .map(p => ({p, d: new Date(p.data_inizio)}))
+        .sort((a,b) => Math.abs(a.d - oggi) - Math.abs(b.d - oggi));
+      if(sorted.length){
+        const nearest = sorted[0].d;
+        calAnno = nearest.getFullYear();
+        calMeseIdx = nearest.getMonth();
+      }
+    }
+  }
+
+  carica();
+</script>
+</body>
+</html>

@@ -289,6 +289,65 @@ async def api_cancella_prenotazione(gruppo_id: str):
     return {"cancellati": n, "gruppo_id": gruppo_id}
 
 
+# ---------------------------------------------------------------------------
+# Studio endpoints
+# ---------------------------------------------------------------------------
+STUDIO_TIPO = "Sala Studio"
+
+@app.get("/api/studio/disponibilita")
+async def api_studio_disponibilita(
+    data_inizio: str,
+    data_fine: str = "",
+    ora_inizio: str = "",
+    ora_fine: str = "",
+):
+    """Verifica se la Sala Studio è libera nel periodo indicato."""
+    try:
+        return P.pezzi_disponibili(
+            STUDIO_TIPO, data_inizio, data_fine or data_inizio,
+            ora_inizio or None, ora_fine or None
+        )
+    except P.PrenotazioneError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/studio/prenotazioni")
+async def api_studio_prenotazioni(dal: str = "", al: str = ""):
+    """Elenco prenotazioni studio."""
+    try:
+        tutte = P.lista_prenotazioni(dal, al)
+        studio = [p for p in tutte if any(
+            (x.get("tipo") == STUDIO_TIPO) for x in (p.get("pezzi") or [])
+        )]
+        return {"count": len(studio), "data": studio}
+    except P.PrenotazioneError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/studio/prenotazioni")
+async def api_studio_crea(body: PrenotazioneInput):
+    """Prenota la Sala Studio (controlla disponibilità, poi inserisce)."""
+    if not body.data_inizio:
+        raise HTTPException(status_code=400, detail="Data inizio è obbligatoria")
+    if not body.prenotato_da:
+        raise HTTPException(status_code=400, detail="Nome di chi prenota è obbligatorio")
+    if not body.progetto:
+        raise HTTPException(status_code=400, detail="Nome del progetto è obbligatorio")
+
+    try:
+        risultato = P.crea_prenotazione_multipla(
+            articoli=[{"tipo": STUDIO_TIPO, "quantita": 1}],
+            data_inizio=body.data_inizio, data_fine=body.data_fine or body.data_inizio,
+            prenotato_da=body.prenotato_da, progetto=body.progetto,
+            ora_inizio=body.ora_inizio or None, ora_fine=body.ora_fine or None,
+            note=body.note,
+        )
+        invia_notifica_prenotazione(risultato)
+        return risultato
+    except P.PrenotazioneError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # Serve il frontend statico (index.html + assets)
 frontend_dir = Path(__file__).parent / "frontend"
 if frontend_dir.exists():

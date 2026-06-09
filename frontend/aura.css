@@ -1,0 +1,278 @@
+/* ============================================================
+   AURA — Design System  ·  v1.0
+   Clarity for creative teams
+   Token, glassmorphism, layout 3 zone, componenti.
+   ============================================================ */
+
+:root{
+  /* brand */
+  --color-primary:#119FA6; --color-primary-hover:#15C2CB; --color-primary-press:#0E7B81;
+  --color-accent:#FF9D0A; --color-accent-hover:#FFBE5C; --color-accent-press:#CC7A00;
+  --color-success:#189B72; --color-error:#C43333;
+  /* neutrals */
+  --n-50:#F5F6F8; --n-200:#D3D6DD; --n-400:#9AA0AD; --n-600:#5B616E; --n-800:#2B2F38; --n-900:#1A1D24;
+  /* background */
+  --bg-deep:#16226A; --bg-mid:#3D4794; --bg-soft:#5A63A8; --bg-blue:#919DE4; --bg-glow:#C1C0ED;
+  /* glass */
+  --glass-fill:rgba(255,255,255,.14); --glass-border:rgba(255,255,255,.28); --glass-blur:20px;
+  --glass-fill-strong:rgba(255,255,255,.22); --glass-fill-soft:rgba(255,255,255,.10);
+  /* text on dark */
+  --text-on-dark:#FFFFFF; --text-on-dark-muted:rgba(255,255,255,.72); --text-on-dark-faint:rgba(255,255,255,.55);
+  /* radius */
+  --r-sm:8px; --r-md:14px; --r-lg:20px; --r-pill:999px;
+  /* spacing (4pt grid) */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-6:24px; --sp-8:32px; --sp-12:48px;
+  /* elevation */
+  --shadow-card:0 8px 30px rgba(0,0,0,.25);
+  --shadow-soft:0 2px 10px rgba(0,0,0,.10);
+  /* type */
+  --font-display:'Space Mono', ui-monospace, monospace;
+  --font-body:'Inter', system-ui, sans-serif;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+html,body{height:100%}
+body{
+  font-family:var(--font-body);
+  color:var(--text-on-dark);
+  background:var(--bg-deep);
+  min-height:100dvh;
+  overflow:hidden; /* il main scrolla internamente */
+}
+
+/* Gradiente di sfondo fisso, immersivo */
+.aura-bg{
+  position:fixed; inset:0; z-index:-1;
+  background:
+    radial-gradient(120% 90% at 60% 65%, rgba(193,192,237,.55), transparent 55%),
+    radial-gradient(90% 70% at 50% 100%, rgba(145,157,228,.7), transparent 60%),
+    linear-gradient(150deg, #16226A 0%, #3D4794 70%, #5A63A8 100%);
+}
+
+a{color:inherit;text-decoration:none}
+
+/* ---------- Glass ---------- */
+.glass{
+  background:var(--glass-fill);
+  border:1px solid var(--glass-border);
+  -webkit-backdrop-filter:blur(var(--glass-blur));
+  backdrop-filter:blur(var(--glass-blur));
+  border-radius:var(--r-md);
+  box-shadow:var(--shadow-card);
+}
+/* fallback senza backdrop-filter */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .glass{background:rgba(61,71,148,.55)}
+}
+
+/* ============================================================
+   APP SHELL — topbar + layout 3 zone
+   ============================================================ */
+
+.app{height:100dvh;display:flex;flex-direction:column;padding:var(--sp-4);gap:var(--sp-4)}
+
+/* ---------- Topbar ---------- */
+.topbar{
+  display:flex;align-items:center;gap:var(--sp-4);
+  padding:0 var(--sp-2);
+  flex:0 0 auto;
+}
+.logo{
+  font-family:var(--font-display);font-weight:700;font-size:22px;
+  letter-spacing:.18em;color:#fff;text-transform:none;
+  display:flex;align-items:center;gap:.5em;white-space:nowrap;
+}
+.logo .star{color:#fff;opacity:.9;font-size:.8em}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:var(--sp-3)}
+
+.icon-circle{
+  width:44px;height:44px;border-radius:var(--r-pill);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border:1px solid var(--glass-border);
+  background:var(--glass-fill);
+  -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur));
+  color:#fff;transition:background .15s;flex:0 0 auto;
+}
+.icon-circle:hover{background:var(--glass-fill-strong)}
+.icon-circle svg{width:20px;height:20px}
+/* avatar con accento amber */
+.avatar{
+  background:radial-gradient(circle at 35% 30%, var(--color-accent-hover), var(--color-accent) 70%);
+  border-color:rgba(255,255,255,.5);
+}
+.avatar svg{width:22px;height:22px}
+
+/* il toggle del menu è visibile solo su mobile */
+.menu-toggle{display:none}
+
+/* ---------- Layout ---------- */
+.layout{
+  flex:1 1 auto;min-height:0;
+  display:grid;grid-template-columns:260px 1fr;gap:var(--sp-4);
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar{
+  display:flex;flex-direction:column;gap:var(--sp-4);
+  min-height:0;
+}
+.nav-panel{padding:var(--sp-4)}
+.nav-item{
+  display:flex;align-items:center;gap:var(--sp-3);
+  padding:11px 14px;border-radius:var(--r-pill);
+  color:var(--text-on-dark-muted);font-weight:600;font-size:15px;
+  transition:background .15s,color .15s;margin-bottom:2px;
+}
+.nav-item svg{width:20px;height:20px;flex:0 0 auto;opacity:.9}
+.nav-item:hover{background:var(--glass-fill);color:#fff}
+.nav-item.active{
+  background:rgba(255,157,10,.85); /* amber semitrasparente */
+  color:#fff;box-shadow:var(--shadow-soft);
+}
+.nav-item.active svg{opacity:1}
+
+.recenti-panel{padding:var(--sp-4);flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.recenti-label{
+  font-family:var(--font-display);font-size:12px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--text-on-dark-muted);margin-bottom:var(--sp-3);
+}
+.recenti-list{overflow-y:auto;display:flex;flex-direction:column;gap:2px;min-height:0}
+.recente{
+  font-size:14px;color:rgba(255,255,255,.85);padding:7px 4px;border-radius:var(--r-sm);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .15s,color .15s;cursor:pointer;
+}
+.recente:hover{background:var(--glass-fill);color:#fff}
+
+/* ---------- Main panel ---------- */
+.main{
+  min-height:0;overflow:hidden;
+  padding:var(--sp-6);
+  display:flex;flex-direction:column;
+}
+
+/* ============================================================
+   COMPONENTI — bottoni, input, chat, card
+   ============================================================ */
+
+/* ---------- Bottoni ---------- */
+.btn{
+  font-family:var(--font-body);font-weight:600;font-size:14px;
+  border:none;border-radius:var(--r-pill);padding:11px 20px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  transition:background .15s,opacity .15s;color:#fff;
+}
+.btn-primary{background:var(--color-accent)}
+.btn-primary:hover{background:var(--color-accent-hover)}
+.btn-primary:active{background:var(--color-accent-press)}
+.btn-secondary{background:var(--color-primary)}
+.btn-secondary:hover{background:var(--color-primary-hover)}
+.btn-secondary:active{background:var(--color-primary-press)}
+.btn-ghost{background:var(--glass-fill);border:1px solid var(--glass-border)}
+.btn-ghost:hover{background:var(--glass-fill-strong)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- Input ---------- */
+.field-label{display:block;font-size:12px;color:var(--text-on-dark-muted);margin:var(--sp-3) 0 6px}
+.input,.select{
+  width:100%;font-family:inherit;font-size:14px;color:#fff;
+  background:var(--glass-fill-soft);border:1px solid var(--glass-border);
+  border-radius:var(--r-sm);padding:10px 13px;outline:none;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+}
+.input::placeholder{color:var(--text-on-dark-faint)}
+.input:focus,.select:focus{border-color:var(--color-primary-hover)}
+.select option{background:#2b2f54;color:#fff}
+
+/* ---------- Chat bar (pill di vetro) ---------- */
+.chat-bar{
+  display:flex;align-items:center;gap:var(--sp-3);
+  background:var(--glass-fill-soft);border:1px solid var(--glass-border);
+  border-radius:var(--r-pill);padding:8px 8px 8px 22px;min-height:56px;
+  -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur));
+}
+.chat-bar input{
+  flex:1;background:none;border:none;outline:none;color:#fff;font-size:15px;font-family:inherit;
+}
+.chat-bar input::placeholder{color:rgba(255,255,255,.6)}
+.send-btn{
+  width:44px;height:44px;border-radius:var(--r-pill);border:none;cursor:pointer;
+  background:var(--color-accent);color:#fff;display:flex;align-items:center;justify-content:center;
+  transition:background .15s;flex:0 0 auto;
+}
+.send-btn:hover{background:var(--color-accent-hover)}
+.send-btn:disabled{opacity:.5;cursor:not-allowed}
+.send-btn svg{width:20px;height:20px}
+
+/* ---------- Chat bubbles ---------- */
+.chat-scroll{flex:1 1 auto;overflow-y:auto;display:flex;flex-direction:column;gap:var(--sp-4);padding-right:6px}
+.bubble-row{display:flex;gap:var(--sp-3);max-width:78%}
+.bubble-row.ai{align-self:flex-start}
+.bubble-row.user{align-self:flex-end;flex-direction:row-reverse}
+.bubble-avatar{
+  width:36px;height:36px;border-radius:var(--r-pill);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+  background:radial-gradient(circle at 35% 30%, var(--color-accent-hover), var(--color-accent) 70%);
+  color:#fff;
+}
+.bubble{
+  background:var(--glass-fill);border:1px solid var(--glass-border);
+  -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur));
+  border-radius:18px;padding:13px 17px;font-size:14.5px;line-height:1.55;color:#fff;
+  white-space:pre-wrap;word-break:break-word;
+}
+.bubble-row.user .bubble{border-bottom-right-radius:5px}
+.bubble-row.ai .bubble{border-bottom-left-radius:5px}
+.bubble strong{font-weight:700}
+/* typing */
+.typing .bubble{display:flex;gap:5px;align-items:center;padding:15px 18px}
+.tdot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.7);animation:tbounce 1.2s infinite}
+.tdot:nth-child(2){animation-delay:.2s}.tdot:nth-child(3){animation-delay:.4s}
+@keyframes tbounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+
+/* ---------- Hero (empty state chat) ---------- */
+.hero-title{
+  font-family:var(--font-display);font-weight:700;
+  font-size:clamp(34px,5vw,56px);line-height:1.1;text-align:center;color:#fff;
+}
+
+/* ---------- Heading display ---------- */
+.h-display{font-family:var(--font-display);font-weight:700;font-size:40px;line-height:1.1}
+.h2{font-family:var(--font-display);font-weight:700;font-size:26px}
+.h3{font-family:var(--font-body);font-weight:600;font-size:20px}
+.caption{font-size:13px;color:var(--text-on-dark-muted)}
+.mono-label{font-family:var(--font-display);font-size:12px;letter-spacing:.2em;text-transform:uppercase}
+
+/* ---------- Backdrop per drawer mobile ---------- */
+.sidebar-backdrop{
+  position:fixed;inset:0;background:rgba(22,34,106,.45);z-index:40;display:none;
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+}
+.sidebar-backdrop.show{display:block}
+
+/* scrollbar discreta */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:6px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media(max-width:1024px){
+  .layout{grid-template-columns:1fr}
+  .menu-toggle{display:flex}
+  .sidebar{
+    position:fixed;top:0;left:0;bottom:0;width:280px;z-index:50;
+    padding:var(--sp-4);background:rgba(38,46,92,.92);
+    -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur));
+    transform:translateX(-105%);transition:transform .25s ease;
+    border-right:1px solid var(--glass-border);
+  }
+  .sidebar.open{transform:translateX(0)}
+}
+@media(max-width:560px){
+  .app{padding:var(--sp-2);gap:var(--sp-2)}
+  .main{padding:var(--sp-4)}
+  .logo{font-size:18px;letter-spacing:.12em}
+  .bubble-row{max-width:90%}
+}
