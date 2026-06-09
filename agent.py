@@ -4,6 +4,7 @@ Agente conversazionale: gestisce il ciclo messaggio → LLM → tool call → ri
 
 import json
 import logging
+import re
 from datetime import date
 
 import ollama
@@ -12,7 +13,55 @@ from tools import TOOL_FUNCTIONS, TOOLS_SCHEMA
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_MODEL = "llama3.1"
+# Motore LLM: Qwen3 14B in locale via Ollama. Forte nel tool calling e multilingue
+# (italiano incluso), nettamente più affidabile di llama3.1:8b.
+OLLAMA_MODEL = "qwen3:14b"
+
+# --- Pulizia output: llama3.1 a volte "narra" la chiamata al tool nel testo
+#     (es. {"function": "...", "parameters": {...}}). L'utente deve vedere SOLO
+#     la risposta, mai il processo. Questa funzione rimuove ogni traccia tecnica.
+_RE_TOOLJSON = re.compile(r'\{(?:[^{}]|\{[^{}]*\})*\}')
+_RE_NARRAZIONE = re.compile(
+    r'(?i)[^.\n]*\b(?:è stat[oa] chiamat[oa]|ho chiamat[oa]|chiamo|sto chiamando|'
+    r'invoco|eseguo|chiamata a|funzione)\b[^.\n]*?\b(?:configurazione|parametri|'
+    r'argoment[io]|seguente)\b[^.\n]*?:'
+)
+
+
+def _pulisci_risposta(testo: str) -> str:
+    """Rimuove dal testo finale i frammenti di chiamata-tool e la narrazione del processo."""
+    if not testo:
+        return testo
+    t = testo
+    # Qwen3 può emettere il ragionamento tra <think>...</think>: lo rimuoviamo.
+    t = re.sub(r'(?is)<think>.*?</think>', '', t)
+    t = re.sub(r'(?is)<think>.*', '', t)  # blocco non chiuso
+    leak = False
+
+    def _drop(m):
+        nonlocal leak
+        blob = m.group(0)
+        if re.search(r'"(?:function|parameters|arguments|name|data_inizio)"', blob):
+            leak = True
+            return ""
+        return blob
+
+    t = _RE_TOOLJSON.sub(_drop, t)
+    if _RE_NARRAZIONE.search(t):
+        leak = True
+        t = _RE_NARRAZIONE.sub("", t)
+
+    if leak:
+        # Se il modello ha separato la risposta vera con "Risposta:"/"Risultato:",
+        # tieni solo ciò che segue l'ultima occorrenza.
+        matches = list(re.finditer(r'(?i)\b(?:risposta|risultato)\s*:\s*', t))
+        if matches:
+            t = t[matches[-1].end():]
+        # Rimuove punteggiatura/spazi orfani lasciati dalla rimozione.
+        t = re.sub(r'^[\s.,:;)\]→-]+', "", t)
+
+    t = re.sub(r'\n{3,}', "\n\n", t).strip()
+    return t or "Puoi ripetere la richiesta?"
 
 SYSTEM_PROMPT = """Sei FlatBot, l'assistente interno di Flatmates — società di produzione video, podcast e contenuti social.
 
@@ -25,7 +74,12 @@ Rispondi in modo naturale, come un collega esperto. MAI iniziare con contesto o 
   Vietato: "Prima verifico X, poi controllo Y, quindi concludo che..."
   Vietato: "Ho trovato 3 videocamere. Ora verifico i microfoni. Ora le luci..."
   Vietato: elencare i passaggi che stai facendo
-✓ SÌ: dai direttamente la risposta finale sintetizzata.
+❌ NO meccanica dei tool nel testo: è ASSOLUTAMENTE VIETATO scrivere nella risposta
+  il nome di una funzione, il JSON di una chiamata, i parametri o frasi come
+  "X è stato chiamato con la seguente configurazione: {...}", "Risposta:", "Procedo con...".
+  I tool si usano col meccanismo interno, MAI scrivendoli come testo all'utente.
+  L'utente non deve MAI vedere {, }, "function", "parameters", o nomi di tool.
+✓ SÌ: dai direttamente la risposta finale sintetizzata, in linguaggio naturale.
 Lunghezza: conciso. Solo le informazioni che servono.
 
 ===== REGOLA #2 — ANALISI DOMANDA: PRIMA RAGIONA, POI (SE SERVE) VERIFICA =====
@@ -55,28 +109,50 @@ Quando l'utente descrive un progetto (es: "video podcast con 2 persone", "interv
 
 ===== LOGICA PRENOTAZIONI =====
 
+⚠️ DATE — REGOLA FERREA:
+- Passa SEMPRE le date ai tool in formato ISO AAAA-MM-GG (es. "3 agosto 2026" → "2026-08-03").
+- L'anno è SEMPRE quello in DATA DI OGGI o successivo. Mai anni passati.
+- NON usare mai il formato americano MM/GG. Sempre ISO con l'anno davanti.
+- La data che ti dà l'utente è SACRA: se dice "3 agosto", la prenotazione è il 3 agosto, non un altro giorno.
+
+⚠️ ATTREZZATURA ≠ SALA STUDIO — NON CONFONDERLI:
+- Fotocamere, videocamere, microfoni, luci, obiettivi, batterie, SD, cavi, treppiedi → sono ATTREZZATURA.
+  Usa prenota_attrezzatura o prenota_piu_articoli. MAI i tool della sala studio.
+- "Sala Studio" → SOLO se l'utente dice esplicitamente "sala studio", "studio", "la sala".
+  Il nome del PROGETTO (es. progetto "studio") NON è una richiesta di sala studio.
+- Esempio: "prenota 3 fotocamere, progetto: studio" → prenota_attrezzatura (3 Videocamera), NON prenota_sala_studio.
+
 CAMPI OBBLIGATORI:
 ✓ Tipo articolo + quantità (o "Sala Studio")
-✓ Data inizio — usa SEMPRE l'anno da DATA DI OGGI, mai anni passati
+✓ Data inizio (ISO AAAA-MM-GG)
 ✓ Chi prenota
 ✓ Nome progetto
 
 ATTREZZATURA:
-- 1 articolo → prenota_attrezzatura
-- Più articoli → prenota_piu_articoli
+- 1 tipo di articolo → prenota_attrezzatura
+- Più tipi diversi → prenota_piu_articoli
 - Se mancano dati → chiedi tutto in un solo messaggio
 
 SALA STUDIO — FLOW:
 1. chiama verifica_disponibilita_studio
 2. Occupata → "❌ Occupata il [data] ([progetto]). Un'altra data?"
-3. Libera + dati mancanti → "✅ Disponibile. Chi prenota e progetto?"
-4. Libera + tutti i dati → chiama prenota_sala_studio → riepilogo sotto
+3. Libera + dati mancanti → chiedi ESATTAMENTE: "✅ Disponibile per [data]. Chi prenota e qual è il nome del progetto?"
+4. Libera + tutti i dati → chiama SUBITO prenota_sala_studio → riepilogo sotto
 
-FORMATO CONFERMA PRENOTAZIONE:
-✅ [Cosa] prenotato/a
-📅 [data] [orari]
-👤 [chi] | 📁 [progetto]
-ID: [id]
+⚠️ COMPLETARE LE PRENOTAZIONI — ANTI-DERIVA:
+- Se hai chiesto "chi prenota e progetto?" e l'utente risponde con un nome e un progetto
+  (es. "Luca, progetto Podcast Ep4"), DEVI chiamare immediatamente il tool di prenotazione
+  (prenota_sala_studio o prenota_attrezzatura) con quei dati e la data già discussa.
+- Durante una prenotazione NON cambiare argomento, NON chiedere budget/luogo,
+  NON dare consigli di equipaggiamento. Completa SOLO la prenotazione.
+- "Podcast", "Spot", "Intervista" come nomi di progetto sono SOLO etichette: non sono
+  richieste di consigli tecnici.
+
+⚠️ CONFERMA PRENOTAZIONE — COPIA VERBATIM:
+Quando un tool restituisce una conferma (✅ ... prenotata, con data, orari e ID),
+RIPORTALA ESATTAMENTE come te l'ha data il tool. NON riscrivere, NON parafrasare,
+NON cambiare la data, gli orari o l'ID. Copia il testo del tool parola per parola.
+È VIETATO inventare date o orari diversi da quelli del tool.
 
 ===== REGOLE HARD =====
 ❌ Mai inventare dati di magazzino — usa sempre i tool
@@ -104,10 +180,10 @@ def esegui_tool(nome: str, argomenti: dict) -> str:
     funzione = TOOL_FUNCTIONS.get(nome)
     if funzione is None:
         return f"Errore: tool '{nome}' non trovato."
-    # llama3.1 a volte wrappa gli args in {"function":..., "parameters":{...}}
+    # Rete di sicurezza: alcuni modelli wrappano gli args in {"parameters":{...}}
+    # o {"arguments":{...}} invece di passarli flat. Li srotoliamo.
     if "parameters" in argomenti and isinstance(argomenti.get("parameters"), dict):
         argomenti = argomenti["parameters"]
-    # oppure in {"arguments":{...}}
     if "arguments" in argomenti and isinstance(argomenti.get("arguments"), dict):
         argomenti = argomenti["arguments"]
     try:
@@ -135,17 +211,27 @@ def chat(cronologia: list[dict]) -> str:
     )
     messaggi = [{"role": "system", "content": prompt_con_data}] + cronologia
 
+    ultimo_tool_result = None  # per fallback se il modello tace dopo un tool
     for _ in range(6):  # max 6 iterazioni (tool call in catena)
         risposta = ollama.chat(
             model=OLLAMA_MODEL,
             messages=messaggi,
             tools=TOOLS_SCHEMA,
+            think=False,  # Qwen3: niente modalità "thinking", risposte dirette e veloci
         )
 
         messaggio = risposta.message
 
         if not messaggio.tool_calls:
-            return messaggio.content or "Non ho capito, puoi riformulare?"
+            pulito = _pulisci_risposta(messaggio.content)
+            if pulito:
+                return pulito
+            # Il modello non ha scritto nulla: se abbiamo eseguito un tool,
+            # mostriamo il suo risultato (es. conferma prenotazione o conteggio)
+            # invece di un generico "non ho capito".
+            if ultimo_tool_result:
+                return _pulisci_risposta(ultimo_tool_result) or ultimo_tool_result
+            return "Non ho capito, puoi riformulare?"
 
         logger.info("Tool calls: %s", [tc.function.name for tc in messaggio.tool_calls])
 
@@ -161,9 +247,14 @@ def chat(cronologia: list[dict]) -> str:
                 except json.JSONDecodeError:
                     args = {}
 
+            logger.info("Tool '%s' args=%s", tc.function.name, args)
             risultato = esegui_tool(tc.function.name, args)
-            logger.info("Tool '%s' → %s", tc.function.name, risultato[:100])
+            logger.info("Tool '%s' → %s", tc.function.name, risultato[:160])
+            ultimo_tool_result = risultato
 
             messaggi.append({"role": "tool", "content": risultato})
 
+    # Loop esaurito: meglio l'ultimo risultato utile che un messaggio d'errore.
+    if ultimo_tool_result:
+        return _pulisci_risposta(ultimo_tool_result) or ultimo_tool_result
     return "Ho elaborato le informazioni ma non ho potuto formulare una risposta. Riprova."

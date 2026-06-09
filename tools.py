@@ -187,22 +187,37 @@ def calcola_attrezzatura(numero_persone: int) -> str:
 # Tool 4 – Prenotazione studio
 # ---------------------------------------------------------------------------
 
-def _correggi_anno(data: str) -> str:
-    """Se il LLM passa un anno passato, sostituisce con l'anno corrente."""
+def _norm_data(testo: str) -> str:
+    """
+    Normalizza QUALSIASI data a ISO 'AAAA-MM-GG' e corregge gli anni passati
+    (errore tipico del LLM, che usa il 2023/2024 dei dati di training).
+    Accetta sia ISO sia GG/MM/AAAA. Se non riesce a interpretarla, restituisce
+    l'input invariato e lascia che sia parse_data() a valle a sollevare l'errore.
+    """
     from datetime import date as _date
-    if not data:
-        return data
+    if not testo or not str(testo).strip():
+        return testo
+    # toglie un eventuale suffisso orario tipo 'T00:00:00' o ' 00:00:00'
+    s = re.split(r"[T ]", str(testo).strip())[0]
     try:
-        parts = data.split("-")
-        if len(parts) == 3:
-            anno = int(parts[0])
-            oggi = _date.today()
-            if anno < oggi.year:
-                parts[0] = str(oggi.year)
-                return "-".join(parts)
+        iso = P.parse_data(s)  # -> 'AAAA-MM-GG'
     except Exception:
-        pass
-    return data
+        return testo
+    y, m, d = iso.split("-")
+    if int(y) < _date.today().year:
+        y = str(_date.today().year)
+    return f"{y}-{m}-{d}"
+
+
+def _fmt_it(iso: str) -> str:
+    """Converte ISO 'AAAA-MM-GG' in 'GG/MM/AAAA' per la visualizzazione italiana."""
+    if not iso:
+        return iso
+    try:
+        y, m, d = iso.split("-")
+        return f"{d}/{m}/{y}"
+    except Exception:
+        return iso
 
 
 def verifica_disponibilita_studio(
@@ -224,17 +239,18 @@ def verifica_disponibilita_studio(
     Returns:
         Messaggio con disponibilità e, se occupata, chi l'ha prenotata.
     """
-    data_inizio = _correggi_anno(data_inizio)
-    data_fine   = _correggi_anno(data_fine) if data_fine else data_inizio
+    data_inizio = _norm_data(data_inizio)
+    data_fine   = _norm_data(data_fine) if data_fine else data_inizio
     try:
         result = P.pezzi_disponibili(
             "Sala Studio", data_inizio, data_fine,
             ora_inizio or None, ora_fine or None
         )
+        per = result["periodo"]
         if result["disponibili"]:
-            msg = f"✅ Sala Studio LIBERA per {data_inizio}"
-            if data_fine and data_fine != data_inizio:
-                msg += f" → {data_fine}"
+            msg = f"✅ Sala Studio LIBERA per {_fmt_it(per['data_inizio'])}"
+            if per["data_fine"] and per["data_fine"] != per["data_inizio"]:
+                msg += f" → {_fmt_it(per['data_fine'])}"
             if ora_inizio:
                 msg += f" dalle {ora_inizio}" + (f" alle {ora_fine}" if ora_fine else "")
             return msg
@@ -244,7 +260,7 @@ def verifica_disponibilita_studio(
                 f"❌ Sala Studio OCCUPATA per quel periodo.\n"
                 f"   Progetto: {occ.get('progetto','—')}\n"
                 f"   Prenotato da: {occ.get('prenotato_da','—')}\n"
-                f"   Dal {occ.get('data_inizio','?')} al {occ.get('data_fine','?')}"
+                f"   Dal {_fmt_it(occ.get('data_inizio','?'))} al {_fmt_it(occ.get('data_fine','?'))}"
             )
     except Exception as e:
         return f"❌ Errore verifica: {e}"
@@ -278,8 +294,8 @@ def prenota_sala_studio(
         return "❌ Devi specificare sia 'prenotato_da' che 'progetto' per completare la prenotazione."
     if not data_inizio:
         return "❌ Specifica almeno data_inizio nel formato AAAA-MM-GG."
-    data_inizio = _correggi_anno(data_inizio)
-    data_fine   = _correggi_anno(data_fine) if data_fine else data_inizio
+    data_inizio = _norm_data(data_inizio)
+    data_fine   = _norm_data(data_fine) if data_fine else data_inizio
     try:
         risultato = P.crea_prenotazione_multipla(
             articoli=[{"tipo": "Sala Studio", "quantita": 1}],
@@ -290,12 +306,16 @@ def prenota_sala_studio(
             ora_inizio=ora_inizio or None,
             ora_fine=ora_fine or None,
         )
+        # Usa le date CANONICHE salvate nel DB, non l'input grezzo del modello.
+        per = risultato["periodo"]
         msg = (
             f"✅ Sala Studio prenotata!\n"
-            f"   📅 {data_inizio}" + (f" → {data_fine}" if data_fine and data_fine != data_inizio else "") + "\n"
+            f"   📅 {_fmt_it(per['data_inizio'])}"
+            + (f" → {_fmt_it(per['data_fine'])}" if per["data_fine"] and per["data_fine"] != per["data_inizio"] else "")
+            + "\n"
         )
-        if ora_inizio:
-            msg += f"   🕐 {ora_inizio}" + (f" – {ora_fine}" if ora_fine else "") + "\n"
+        if per.get("ora_inizio"):
+            msg += f"   🕐 {per['ora_inizio']}" + (f" – {per['ora_fine']}" if per.get("ora_fine") else "") + "\n"
         msg += f"   👤 {prenotato_da}  |  📁 {progetto}\n"
         msg += f"   ID prenotazione: {risultato['gruppo_id']}"
         return msg
@@ -520,14 +540,16 @@ def verifica_disponibilita(tipo: str, data_inizio: str, data_fine: str = "",
 
     Args:
         tipo: Tipo di attrezzatura (es. 'Videocamera', 'Scheda SD', 'Microfono').
-        data_inizio: Data inizio (GG/MM/AAAA).
-        data_fine: Data fine (GG/MM/AAAA). Se vuota = stesso giorno.
+        data_inizio: Data inizio (ISO AAAA-MM-GG, es. 2026-08-03).
+        data_fine: Data fine (ISO AAAA-MM-GG, es. 2026-08-03). Se vuota = stesso giorno.
         ora_inizio: (opzionale) ora inizio HH:MM, solo se serve granularità oraria.
         ora_fine: (opzionale) ora fine HH:MM.
 
     Returns:
         Riepilogo testuale di disponibili e occupati nel periodo.
     """
+    data_inizio = _norm_data(data_inizio)
+    data_fine   = _norm_data(data_fine) if data_fine else data_inizio
     try:
         d = P.pezzi_disponibili(tipo, data_inizio, data_fine or data_inizio,
                                 ora_inizio or None, ora_fine or None)
@@ -536,7 +558,7 @@ def verifica_disponibilita(tipo: str, data_inizio: str, data_fine: str = "",
 
     per = d["periodo"]
     intestazione = (
-        f"📅 Disponibilità **{d['tipo']}** dal {per['data_inizio']} al {per['data_fine']}"
+        f"📅 Disponibilità **{d['tipo']}** dal {_fmt_it(per['data_inizio'])} al {_fmt_it(per['data_fine'])}"
         + (f" ({per['ora_inizio']}–{per['ora_fine']})" if per["ora_inizio"] else "")
         + ":"
     )
@@ -548,7 +570,7 @@ def verifica_disponibilita(tipo: str, data_inizio: str, data_fine: str = "",
         linee.append(f"  🔴 Occupati: {len(d['occupati'])}")
         for o in d["occupati"]:
             chi = o.get("progetto") or o.get("prenotato_da") or "prenotato"
-            linee.append(f"     {o['codice']} → {chi} ({o['data_inizio']}→{o['data_fine']})")
+            linee.append(f"     {o['codice']} → {chi} ({_fmt_it(o['data_inizio'])}→{_fmt_it(o['data_fine'])})")
     return "\n".join(linee)
 
 
@@ -570,8 +592,8 @@ def prenota_attrezzatura(tipo: str, quantita: int, data_inizio: str, data_fine: 
     Args:
         tipo: Tipo di attrezzatura (es. 'Videocamera', 'Scheda SD', 'Microfono').
         quantita: Quante unità prenotare (intero >= 1).
-        data_inizio: Data inizio (GG/MM/AAAA).
-        data_fine: Data fine (GG/MM/AAAA). Se vuota = stesso giorno.
+        data_inizio: Data inizio (ISO AAAA-MM-GG, es. 2026-08-03).
+        data_fine: Data fine (ISO AAAA-MM-GG, es. 2026-08-03). Se vuota = stesso giorno.
         prenotato_da: Nome di chi prenota.
         progetto: Nome del progetto/produzione.
         ora_inizio: (opzionale) ora inizio HH:MM.
@@ -580,6 +602,8 @@ def prenota_attrezzatura(tipo: str, quantita: int, data_inizio: str, data_fine: 
     Returns:
         Conferma con i codici assegnati e l'id prenotazione, oppure errore.
     """
+    data_inizio = _norm_data(data_inizio)
+    data_fine   = _norm_data(data_fine) if data_fine else data_inizio
     try:
         r = P.crea_prenotazione(tipo, int(quantita), data_inizio, data_fine or data_inizio,
                                 prenotato_da, progetto, ora_inizio or None, ora_fine or None)
@@ -591,7 +615,7 @@ def prenota_attrezzatura(tipo: str, quantita: int, data_inizio: str, data_fine: 
     linee = [
         f"✅ Prenotazione confermata (id: {r['gruppo_id']})",
         f"   {r['quantita']}× {r['tipo']} → {codici}",
-        f"   📅 Dal {per['data_inizio']} al {per['data_fine']}"
+        f"   📅 Dal {_fmt_it(per['data_inizio'])} al {_fmt_it(per['data_fine'])}"
         + (f" ({per['ora_inizio']}–{per['ora_fine']})" if per["ora_inizio"] else ""),
     ]
     if r["prenotato_da"]:
@@ -639,8 +663,8 @@ def prenota_piu_articoli(articoli: str, data_inizio: str, data_fine: str = "",
     Args:
         articoli: Lista in formato testo separato da virgole, ogni voce "QUANTITÀ TIPO",
                   es. "2 fotocamere, 4 schede SD, 1 microfono". Capisce i sinonimi.
-        data_inizio: Data inizio (GG/MM/AAAA).
-        data_fine: Data fine (GG/MM/AAAA). Vuota = stesso giorno.
+        data_inizio: Data inizio (ISO AAAA-MM-GG, es. 2026-08-03).
+        data_fine: Data fine (ISO AAAA-MM-GG, es. 2026-08-03). Vuota = stesso giorno.
         prenotato_da: Nome di chi prenota.
         progetto: Nome del progetto/produzione.
         ora_inizio: (opzionale) ora inizio HH:MM.
@@ -653,6 +677,8 @@ def prenota_piu_articoli(articoli: str, data_inizio: str, data_fine: str = "",
     lista = _parse_articoli(articoli)
     if not lista:
         return "❌ Non ho capito quali articoli prenotare. Esempio: '2 fotocamere, 4 SD'."
+    data_inizio = _norm_data(data_inizio)
+    data_fine   = _norm_data(data_fine) if data_fine else data_inizio
     try:
         r = P.crea_prenotazione_multipla(
             lista, data_inizio, data_fine or data_inizio,
@@ -664,7 +690,7 @@ def prenota_piu_articoli(articoli: str, data_inizio: str, data_fine: str = "",
     per = r["periodo"]
     linee = [
         f"✅ Prenotazione confermata (id: {r['gruppo_id']}) — {r['totale_pezzi']} pezzi totali",
-        f"   📅 Dal {per['data_inizio']} al {per['data_fine']}"
+        f"   📅 Dal {_fmt_it(per['data_inizio'])} al {_fmt_it(per['data_fine'])}"
         + (f" ({per['ora_inizio']}–{per['ora_fine']})" if per["ora_inizio"] else ""),
     ]
     for a in r["articoli"]:
@@ -688,8 +714,8 @@ def mostra_prenotazioni(dal: str = "", al: str = "") -> str:
     ci sono a luglio?", "chi ha la Lumix questa settimana?".
 
     Args:
-        dal: (opzionale) mostra prenotazioni attive dal (GG/MM/AAAA).
-        al:  (opzionale) ...fino al (GG/MM/AAAA).
+        dal: (opzionale) mostra prenotazioni attive dal (ISO AAAA-MM-GG, es. 2026-08-03).
+        al:  (opzionale) ...fino al (ISO AAAA-MM-GG, es. 2026-08-03).
 
     Returns:
         Elenco delle prenotazioni con periodo, pezzi, responsabile e progetto.
@@ -704,7 +730,7 @@ def mostra_prenotazioni(dal: str = "", al: str = "") -> str:
 
     linee = [f"📋 Prenotazioni ({len(righe)}):"]
     for r in righe:
-        periodo = f"{r['data_inizio']}→{r['data_fine']}"
+        periodo = f"{_fmt_it(r['data_inizio'])}→{_fmt_it(r['data_fine'])}"
         if r["ora_inizio"]:
             periodo += f" {r['ora_inizio']}–{r['ora_fine']}"
         etichetta = r["progetto"] or r["prenotato_da"] or "—"
@@ -1027,8 +1053,8 @@ TOOLS_SCHEMA: list[dict] = [
                 "type": "object",
                 "properties": {
                     "tipo": {"type": "string", "description": "Tipo (es. 'Videocamera', 'Scheda SD')."},
-                    "data_inizio": {"type": "string", "description": "Data inizio GG/MM/AAAA."},
-                    "data_fine": {"type": "string", "description": "Data fine GG/MM/AAAA (vuota = stesso giorno)."},
+                    "data_inizio": {"type": "string", "description": "Data inizio in formato ISO AAAA-MM-GG (es. 2026-08-03). MAI formato americano."},
+                    "data_fine": {"type": "string", "description": "Data fine in formato ISO AAAA-MM-GG (vuota = stesso giorno)."},
                     "ora_inizio": {"type": "string", "description": "Opzionale, ora inizio HH:MM."},
                     "ora_fine": {"type": "string", "description": "Opzionale, ora fine HH:MM."},
                 },
@@ -1050,8 +1076,8 @@ TOOLS_SCHEMA: list[dict] = [
                 "properties": {
                     "tipo": {"type": "string", "description": "Tipo (es. 'Videocamera', 'Scheda SD')."},
                     "quantita": {"type": "integer", "description": "Quante unità (>=1)."},
-                    "data_inizio": {"type": "string", "description": "Data inizio GG/MM/AAAA."},
-                    "data_fine": {"type": "string", "description": "Data fine GG/MM/AAAA (vuota = stesso giorno)."},
+                    "data_inizio": {"type": "string", "description": "Data inizio in formato ISO AAAA-MM-GG (es. 2026-08-03). MAI formato americano."},
+                    "data_fine": {"type": "string", "description": "Data fine in formato ISO AAAA-MM-GG (vuota = stesso giorno)."},
                     "prenotato_da": {"type": "string", "description": "Nome di chi prenota."},
                     "progetto": {"type": "string", "description": "Nome del progetto/produzione."},
                     "ora_inizio": {"type": "string", "description": "Opzionale, ora inizio HH:MM."},
@@ -1078,8 +1104,8 @@ TOOLS_SCHEMA: list[dict] = [
                         "type": "string",
                         "description": "Voci separate da virgola 'QUANTITÀ TIPO' (es. '2 fotocamere, 4 SD, 1 microfono').",
                     },
-                    "data_inizio": {"type": "string", "description": "Data inizio GG/MM/AAAA."},
-                    "data_fine": {"type": "string", "description": "Data fine GG/MM/AAAA (vuota = stesso giorno)."},
+                    "data_inizio": {"type": "string", "description": "Data inizio in formato ISO AAAA-MM-GG (es. 2026-08-03). MAI formato americano."},
+                    "data_fine": {"type": "string", "description": "Data fine in formato ISO AAAA-MM-GG (vuota = stesso giorno)."},
                     "prenotato_da": {"type": "string", "description": "Nome di chi prenota."},
                     "progetto": {"type": "string", "description": "Nome del progetto/produzione."},
                     "ora_inizio": {"type": "string", "description": "Opzionale, ora inizio HH:MM."},
@@ -1100,8 +1126,8 @@ TOOLS_SCHEMA: list[dict] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dal": {"type": "string", "description": "Opzionale, da GG/MM/AAAA."},
-                    "al": {"type": "string", "description": "Opzionale, a GG/MM/AAAA."},
+                    "dal": {"type": "string", "description": "Opzionale, da (ISO AAAA-MM-GG)."},
+                    "al": {"type": "string", "description": "Opzionale, a (ISO AAAA-MM-GG)."},
                 },
             },
         },
@@ -1128,9 +1154,11 @@ TOOLS_SCHEMA: list[dict] = [
         "function": {
             "name": "cerca_inventario",
             "description": (
-                "Cerca nell'inventario di attrezzatura di Flatmates. "
-                "Restituisce codice, nome, descrizione, categoria, posizione e stato. "
-                "Esempi di ricerca: 'luce godox', 'SC-GDX-001', 'cavo', 'categoria:Luci'."
+                "Cerca uno SPECIFICO oggetto nell'inventario per parola chiave (codice, nome, "
+                "categoria). Restituisce codice, nome, descrizione, posizione e stato. "
+                "Esempi: 'luce godox', 'SC-GDX-001', 'categoria:Luci'. "
+                "NON usare per contare quantità o rispondere a 'quante/quanti X abbiamo?': "
+                "per quello usa conta_attrezzatura_per_tipo."
             ),
             "parameters": {
                 "type": "object",
@@ -1193,10 +1221,11 @@ TOOLS_SCHEMA: list[dict] = [
         "function": {
             "name": "raccomanda_equipaggiamento_podcast",
             "description": (
-                "Raccomanda setup di equipaggiamento completo per podcast, video podcast o contenuti social. "
-                "Propone 2-3 configurazioni diverse (entry-level, professionale, broadcast) basate su budget, "
-                "tipo di contenuto (podcast audio, video podcast, YouTube, TikTok, social media) e location "
-                "(stanza rumorosa, casa, studio, esterno). Include modelli specifici e prezzi approssimativi."
+                "Usa SOLO se l'utente chiede ESPLICITAMENTE un consiglio su quale equipaggiamento "
+                "comprare o usare (es. 'che setup mi consigli per un podcast?', 'che attrezzatura serve "
+                "con 500€?'). Propone configurazioni per budget. "
+                "NON usare durante una prenotazione, NON usare se l'utente sta solo prenotando o nominando "
+                "un progetto chiamato 'Podcast'. Un nome di progetto NON è una richiesta di consigli."
             ),
             "parameters": {
                 "type": "object",

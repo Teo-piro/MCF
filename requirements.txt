@@ -1,6 +1,6 @@
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
-ollama==0.4.4
+ollama>=0.6.2
 pydantic==2.10.3
 duckduckgo-search>=3.8.0
 requests==2.31.0
