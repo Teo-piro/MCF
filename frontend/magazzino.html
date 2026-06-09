@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Magazzino & Prenotazioni – Flatmates</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:#0f0f13;color:#e8e8ee;min-height:100dvh}
+  a{color:#a59bff;text-decoration:none}
+
+  header{background:#1a1a24;border-bottom:1px solid #2a2a3a;padding:14px 24px;
+         display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+  .logo{width:36px;height:36px;background:linear-gradient(135deg,#6c63ff,#a855f7);
+        border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+  header h1{font-size:17px;color:#fff}
+  nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+  nav a.active{color:#fff;font-weight:600}
+
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 16px;
+        display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+
+  .card{background:#1a1a24;border:1px solid #2a2a3a;border-radius:14px;padding:18px;margin-bottom:20px}
+  .card h2{font-size:15px;color:#fff;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+
+  label{display:block;font-size:12px;color:#999;margin:10px 0 4px}
+  input,select{width:100%;background:#0f0f13;border:1px solid #2a2a3a;border-radius:9px;
+        color:#e8e8ee;font-size:14px;padding:9px 11px;outline:none;font-family:inherit}
+  input:focus,select:focus{border-color:#6c63ff}
+  .row{display:flex;gap:10px}
+  .row>div{flex:1}
+
+  button{background:#6c63ff;border:none;border-radius:9px;color:#fff;font-size:14px;
+          font-weight:600;padding:10px 16px;cursor:pointer;transition:background .15s}
+  button:hover{background:#7c73ff}
+  button.ghost{background:#23232f;border:1px solid #34344a}
+  button.ghost:hover{background:#2c2c3c}
+  button.danger{background:#3a2330;color:#ff8a8a;padding:5px 10px;font-size:12px}
+  button.danger:hover{background:#4a2a3a}
+
+  .msg{margin-top:12px;padding:10px 12px;border-radius:9px;font-size:13px;white-space:pre-wrap;line-height:1.5}
+  .msg.ok{background:#16281c;border:1px solid #1f7a3f;color:#9ff5bd}
+  .msg.err{background:#2a1620;border:1px solid #7a1f3f;color:#ff9fb5}
+  .msg.info{background:#15202c;border:1px solid #1f567a;color:#9fd2f5}
+
+  /* Inventario */
+  .filtri{display:flex;gap:10px;margin-bottom:12px}
+  .inv-group{margin-bottom:14px}
+  .inv-macro{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#6c63ff;margin:12px 0 6px}
+  .inv-item{display:flex;justify-content:space-between;align-items:center;
+            padding:7px 10px;border-radius:8px;font-size:13px;border:1px solid transparent}
+  .inv-item:hover{background:#20202c;border-color:#2a2a3a}
+  .inv-item .code{font-family:ui-monospace,monospace;color:#a59bff;font-size:12px}
+  .inv-item .badge{font-size:11px;color:#888}
+
+  /* Calendario */
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .cal-head strong{font-size:14px}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal .dow{font-size:11px;color:#777;text-align:center;padding:4px 0}
+  .cal .day{min-height:64px;background:#0f0f13;border:1px solid #23232f;border-radius:7px;
+            padding:4px;font-size:11px;overflow:hidden}
+  .cal .day.empty{background:transparent;border:none}
+  .cal .day .num{color:#777;font-size:11px}
+  .cal .day.today{border-color:#6c63ff}
+  .cal .ev{margin-top:2px;background:#2a2550;border-left:2px solid #6c63ff;border-radius:3px;
+           padding:1px 4px;color:#cfc9ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .cal .ev:hover{background:#3a3270}
+
+  /* Modale dettaglio prenotazione */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;
+                 align-items:center;justify-content:center;z-index:100;padding:20px}
+  .modal-overlay.show{display:flex}
+  .modal{background:#1a1a24;border:1px solid #2a2a3a;border-radius:16px;max-width:560px;width:100%;
+         max-height:85vh;overflow:auto;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .modal h3{font-size:19px;color:#fff;margin-bottom:2px}
+  .modal .sub{font-size:12px;color:#777;font-family:ui-monospace,monospace}
+  .modal .x{background:none;border:none;color:#999;font-size:22px;cursor:pointer;line-height:1;padding:0 4px}
+  .modal .x:hover{color:#fff}
+  .modal .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+  .modal .field .k{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px}
+  .modal .field .v{font-size:14px;color:#e8e8ee;margin-top:3px}
+  .modal .sezione-tit{font-size:12px;color:#6c63ff;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px}
+  .modal .pgrp{background:#0f0f13;border:1px solid #23232f;border-radius:9px;padding:9px 12px;margin-bottom:7px}
+  .modal .pgrp .ptit{font-size:13px;color:#fff;font-weight:600;margin-bottom:4px}
+  .modal .pgrp .prow{font-size:12.5px;color:#cfcfe0;padding:1px 0}
+  .modal .pgrp .prow .cod{font-family:ui-monospace,monospace;font-size:11px;color:#8b86c9}
+  .modal .azioni{display:flex;gap:10px;margin-top:18px}
+
+  /* Prenotazioni list */
+  .pren{border:1px solid #2a2a3a;border-radius:10px;padding:11px 13px;margin-bottom:9px}
+  .pren .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .pren .proj{font-size:14px;color:#fff;font-weight:600}
+  .pren .meta{font-size:12px;color:#999;margin-top:3px}
+  .pren .codes{font-size:12px;color:#cfcfe0;margin-top:5px;line-height:1.6}
+  .pren .codes .cod{font-family:ui-monospace,monospace;font-size:11px;color:#8b86c9}
+  .empty-state{color:#777;font-size:13px;text-align:center;padding:18px}
+
+  /* Carrello (lista della spesa) */
+  .carrello{margin:10px 0 4px;display:flex;flex-direction:column;gap:6px}
+  .cart-item{display:flex;align-items:center;justify-content:space-between;
+             background:#20202c;border:1px solid #2a2a3a;border-radius:8px;padding:7px 11px;font-size:13px}
+  .cart-item .qta{background:#6c63ff;color:#fff;border-radius:6px;padding:1px 8px;font-weight:600;font-size:12px;margin-right:8px}
+  .cart-item .rm{background:none;border:none;color:#ff8a8a;cursor:pointer;font-size:16px;padding:0 4px}
+  .cart-item.over{border-color:#7a1f3f;background:#2a1620}
+  .cart-item .avail{font-size:11px;color:#ff9fb5;margin-left:6px;white-space:nowrap}
+  .cart-item .avail.ok{color:#7bdca0}
+  .cart-empty{color:#666;font-size:12px;font-style:italic;padding:6px 2px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  /* Flatpickr datepicker */
+  .flatpickr-calendar{background:#1a1a24;color:#e8e8ee;border:1px solid #2a2a3a;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+  .flatpickr-calendar .flatpickr-months .flatpickr-month{background:#0f0f13}
+  .flatpickr-calendar .flatpickr-weekdays{background:#0f0f13}
+  .flatpickr-calendar .flatpickr-day.selected{background:#6c63ff;border-color:#6c63ff}
+  .flatpickr-calendar .flatpickr-day.today{border-color:#6c63ff}
+  .flatpickr-calendar .flatpickr-day:hover{background:#2a2a3a}
+  .flatpickr-calendar .nextMonthDay,.flatpickr-calendar .prevMonthDay{color:#555}
+  .flatpickr-input.required{border-color:#6c63ff}
+
+  /* Required field indicator */
+  .required::after{content:" *";color:#ff8a8a;margin-left:2px}
+</style>
+
+<!-- Libreria Flatpickr per datepicker moderno -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">📦</div>
+  <h1>Magazzino & Prenotazioni</h1>
+  <nav>
+    <a href="/">💬 Chat</a>
+    <a href="/magazzino.html" class="active">📦 Magazzino</a>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <!-- COLONNA SINISTRA: Inventario -->
+  <div>
+    <div class="card">
+      <h2>🔧 Inventario magazzino</h2>
+      <div class="filtri">
+        <input id="inv-search" placeholder="Cerca per nome o codice…" oninput="renderInventario()" />
+        <select id="inv-tipo" onchange="renderInventario()" style="max-width:200px">
+          <option value="">Tutti i tipi</option>
+        </select>
+      </div>
+      <div id="inventario"><div class="empty-state">Caricamento…</div></div>
+    </div>
+  </div>
+
+  <!-- COLONNA DESTRA: Prenotazione + Calendario + Lista -->
+  <div>
+    <div class="card">
+      <h2>➕ Nuova prenotazione</h2>
+
+      <label>Aggiungi articoli alla lista</label>
+      <div class="row" style="align-items:stretch">
+        <div style="flex:2"><select id="f-tipo"></select></div>
+        <div style="max-width:88px"><input id="f-qta" type="number" min="1" value="1" /></div>
+        <div style="max-width:130px"><button class="ghost" style="width:100%;height:100%" onclick="aggiungiArticolo()">➕ Aggiungi</button></div>
+      </div>
+      <div id="carrello" class="carrello"></div>
+      <div id="cart-warning"></div>
+
+      <div class="row">
+        <div>
+          <label class="required">Data inizio</label>
+          <input id="f-dal" type="text" placeholder="Seleziona data..." required />
+        </div>
+        <div>
+          <label>Data fine</label>
+          <input id="f-al" type="text" placeholder="Seleziona data..." />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Ora inizio <span style="color:#666">(opz.)</span></label>
+          <select id="f-oin">
+            <option value="">— nessuna —</option>
+            <option value="06:00">06:00</option><option value="06:30">06:30</option>
+            <option value="07:00">07:00</option><option value="07:30">07:30</option>
+            <option value="08:00">08:00</option><option value="08:30">08:30</option>
+            <option value="09:00">09:00</option><option value="09:30">09:30</option>
+            <option value="10:00">10:00</option><option value="10:30">10:30</option>
+            <option value="11:00">11:00</option><option value="11:30">11:30</option>
+            <option value="12:00">12:00</option><option value="12:30">12:30</option>
+            <option value="13:00">13:00</option><option value="13:30">13:30</option>
+            <option value="14:00">14:00</option><option value="14:30">14:30</option>
+            <option value="15:00">15:00</option><option value="15:30">15:30</option>
+            <option value="16:00">16:00</option><option value="16:30">16:30</option>
+            <option value="17:00">17:00</option><option value="17:30">17:30</option>
+            <option value="18:00">18:00</option><option value="18:30">18:30</option>
+            <option value="19:00">19:00</option><option value="19:30">19:30</option>
+            <option value="20:00">20:00</option>
+          </select>
+        </div>
+        <div>
+          <label>Ora fine <span style="color:#666">(opz.)</span></label>
+          <select id="f-ofin">
+            <option value="">— nessuna —</option>
+            <option value="06:00">06:00</option><option value="06:30">06:30</option>
+            <option value="07:00">07:00</option><option value="07:30">07:30</option>
+            <option value="08:00">08:00</option><option value="08:30">08:30</option>
+            <option value="09:00">09:00</option><option value="09:30">09:30</option>
+            <option value="10:00">10:00</option><option value="10:30">10:30</option>
+            <option value="11:00">11:00</option><option value="11:30">11:30</option>
+            <option value="12:00">12:00</option><option value="12:30">12:30</option>
+            <option value="13:00">13:00</option><option value="13:30">13:30</option>
+            <option value="14:00">14:00</option><option value="14:30">14:30</option>
+            <option value="15:00">15:00</option><option value="15:30">15:30</option>
+            <option value="16:00">16:00</option><option value="16:30">16:30</option>
+            <option value="17:00">17:00</option><option value="17:30">17:30</option>
+            <option value="18:00">18:00</option><option value="18:30">18:30</option>
+            <option value="19:00">19:00</option><option value="19:30">19:30</option>
+            <option value="20:00">20:00</option><option value="20:30">20:30</option>
+            <option value="21:00">21:00</option><option value="21:30">21:30</option>
+            <option value="22:00">22:00</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="required">Chi prenota</label>
+          <input id="f-chi" placeholder="Es. Matteo" required />
+        </div>
+        <div>
+          <label class="required">Progetto</label>
+          <input id="f-prog" placeholder="Es. Podcast Ep.5" required />
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="ghost" onclick="verifica()">🔍 Verifica disponibilità</button>
+        <button id="btn-prenota" onclick="prenota()">✅ Prenota</button>
+      </div>
+      <div id="form-msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>📅 Calendario prenotazioni</h2>
+      <div class="cal-head">
+        <button class="ghost" onclick="cambiaMese(-1)">‹</button>
+        <strong id="cal-label"></strong>
+        <button class="ghost" onclick="cambiaMese(1)">›</button>
+      </div>
+      <div class="cal" id="calendario"></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Tutte le prenotazioni</h2>
+      <div id="lista-pren"><div class="empty-state">Caricamento…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modale dettaglio prenotazione -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)chiudiDettaglio()">
+  <div class="modal" id="modal-body"></div>
+</div>
+
+<script>
+const API = "";  // stessa origine
+let inventario = [];      // tutti i pezzi
+let riepilogo = [];       // conteggi per tipo
+let prenotazioni = [];    // tutte le prenotazioni
+let calDate = new Date(); // mese mostrato nel calendario
+let stockTotale = {};     // {tipo: n pezzi totali in magazzino}
+let validaSeq = 0;        // contatore per ignorare risposte di validazione obsolete
+
+// ---------- Helpers ----------
+async function jget(url){ const r = await fetch(API+url); if(!r.ok) throw new Error((await r.json()).detail||r.status); return r.json(); }
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild; }
+function fmtData(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function msg(id,text,cls){ document.getElementById(id).innerHTML = text ? `<div class="msg ${cls}">${text}</div>` : ''; }
+
+// ---------- Caricamento dati ----------
+async function caricaTutto(){
+  const [inv, rie, pren] = await Promise.all([
+    jget('/api/inventario'),
+    jget('/api/inventario/riepilogo'),
+    jget('/api/prenotazioni'),
+  ]);
+  inventario = inv.data;
+  riepilogo = rie.data;
+  prenotazioni = pren.data;
+  popolaTipi();
+  renderInventario();
+  renderCalendario();
+  renderLista();
+}
+
+function popolaTipi(){
+  // dropdown form (tipo) + filtro inventario
+  const tipi = [...new Set(riepilogo.map(r=>r.tipo))].sort();
+  const fTipo = document.getElementById('f-tipo');
+  const invTipo = document.getElementById('inv-tipo');
+  fTipo.innerHTML = riepilogo.map(r=>`<option value="${r.tipo}">${r.tipo} (${r.n} in magazzino)</option>`).join('');
+  invTipo.innerHTML = '<option value="">Tutti i tipi</option>' + tipi.map(t=>`<option value="${t}">${t}</option>`).join('');
+  // mappa stock totale per tipo (per il ceiling immediato senza rete)
+  stockTotale = {};
+  riepilogo.forEach(r => stockTotale[r.tipo] = r.n);
+  aggiornaMaxQta();
+}
+
+// Limita il campo quantità al numero di pezzi esistenti per il tipo selezionato
+function aggiornaMaxQta(){
+  const tipo = document.getElementById('f-tipo').value;
+  const max = stockTotale[tipo] || 1;
+  const inp = document.getElementById('f-qta');
+  inp.max = max;
+  if((parseInt(inp.value)||1) > max) inp.value = max;
+}
+
+// ---------- Inventario ----------
+function renderInventario(){
+  const q = document.getElementById('inv-search').value.toLowerCase();
+  const tipoF = document.getElementById('inv-tipo').value;
+  let items = inventario.filter(i=>{
+    const matchQ = !q || (i.nome||'').toLowerCase().includes(q) || (i.codice||'').toLowerCase().includes(q);
+    const matchT = !tipoF || i.tipo===tipoF;
+    return matchQ && matchT;
+  });
+  const cont = document.getElementById('inventario');
+  if(!items.length){ cont.innerHTML='<div class="empty-state">Nessun risultato.</div>'; return; }
+  // raggruppa per macro
+  const groups = {};
+  items.forEach(i=>{ (groups[i.macro]=groups[i.macro]||[]).push(i); });
+  cont.innerHTML = Object.keys(groups).sort().map(macro=>`
+    <div class="inv-group">
+      <div class="inv-macro">${macro} · ${groups[macro].length}</div>
+      ${groups[macro].map(i=>`
+        <div class="inv-item">
+          <div><span class="code">${i.codice}</span> &nbsp; ${i.nome||'(senza nome)'}</div>
+          <div class="badge">${i.tipo}</div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ---------- Carrello (lista della spesa) ----------
+let carrello = [];  // [{tipo, quantita, disponibili}]  disponibili=null finché non verificato
+
+function aggiungiArticolo(){
+  const tipo = document.getElementById('f-tipo').value;
+  const qta = parseInt(document.getElementById('f-qta').value)||1;
+  if(!tipo) return;
+  const esistente = carrello.find(a=>a.tipo===tipo);
+  if(esistente) esistente.quantita += qta;          // somma se stesso tipo
+  else carrello.push({tipo, quantita:qta, disponibili:null});
+  document.getElementById('f-qta').value = 1;
+  renderCarrello();
+  validaCarrello();          // verifica subito la disponibilità nel periodo
+  msg('form-msg','','');
+}
+
+function rimuoviArticolo(i){ carrello.splice(i,1); renderCarrello(); validaCarrello(); }
+
+// Stato di un articolo rispetto allo stock e alla disponibilità nel periodo.
+// Ritorna {over:bool, note:string, ok:bool}
+function statoArticolo(a){
+  const stock = (a.tipo in stockTotale) ? stockTotale[a.tipo] : null;
+  if(stock!=null && a.quantita > stock)
+    return {over:true,  note:`⚠️ solo ${stock} in magazzino`};
+  if(a.disponibili!=null && a.quantita > a.disponibili)
+    return {over:true,  note:`⚠️ solo ${a.disponibili} liberi nel periodo`};
+  if(a.disponibili!=null)
+    return {over:false, note:`✓ ${a.disponibili} liberi`, ok:true};
+  return {over:false, note:''};   // non ancora verificato
+}
+
+function renderCarrello(){
+  const c = document.getElementById('carrello');
+  const warn = document.getElementById('cart-warning');
+  const btn = document.getElementById('btn-prenota');
+  if(!carrello.length){
+    c.innerHTML = '<div class="cart-empty">Nessun articolo nella lista. Aggiungine sopra.</div>';
+    warn.innerHTML = ''; if(btn) btn.disabled = false;
+    return;
+  }
+  let anyOver = false;
+  c.innerHTML = carrello.map((a,i)=>{
+    const s = statoArticolo(a);
+    if(s.over) anyOver = true;
+    const noteHtml = s.note ? `<span class="avail ${s.ok?'ok':''}">${s.note}</span>` : '';
+    return `<div class="cart-item ${s.over?'over':''}">
+      <span><span class="qta">${a.quantita}×</span>${a.tipo} ${noteHtml}</span>
+      <button class="rm" onclick="rimuoviArticolo(${i})" title="Rimuovi">×</button>
+    </div>`;
+  }).join('');
+
+  if(anyOver){
+    warn.innerHTML = '<div class="msg err" style="margin-top:8px">⚠️ Alcuni articoli superano la disponibilità: riduci le quantità prima di prenotare.</div>';
+    if(btn) btn.disabled = true;
+  } else {
+    warn.innerHTML = '';
+    if(btn) btn.disabled = false;
+  }
+}
+
+// Verifica la disponibilità reale nel periodo per ogni articolo del carrello.
+async function validaCarrello(){
+  if(!carrello.length) return;
+  const f = leggiCondivisi();
+  const mySeq = ++validaSeq;
+  // Senza data inizio non possiamo interrogare il periodo: resta solo il controllo stock.
+  if(!f.data_inizio){ carrello.forEach(a=>a.disponibili=null); renderCarrello(); return; }
+  try{
+    await Promise.all(carrello.map(async a=>{
+      const qs = new URLSearchParams({tipo:a.tipo,data_inizio:f.data_inizio,data_fine:f.data_fine||f.data_inizio,ora_inizio:f.ora_inizio,ora_fine:f.ora_fine});
+      try{ const d = await jget('/api/disponibilita?'+qs); a.disponibili = d.disponibili.length; }
+      catch(_){ a.disponibili = null; }
+    }));
+  } finally {
+    if(mySeq === validaSeq) renderCarrello();  // ignora risposte obsolete
+  }
+}
+
+// ---------- Verifica / Prenota ----------
+function leggiCondivisi(){
+  return {
+    data_inizio: document.getElementById('f-dal').value,
+    data_fine: document.getElementById('f-al').value,
+    ora_inizio: document.getElementById('f-oin').value,
+    ora_fine: document.getElementById('f-ofin').value,
+    prenotato_da: document.getElementById('f-chi').value,
+    progetto: document.getElementById('f-prog').value,
+  };
+}
+
+async function verifica(){
+  const f = leggiCondivisi();
+  if(!carrello.length){ msg('form-msg','Aggiungi almeno un articolo alla lista.','err'); return; }
+  if(!f.data_inizio){ msg('form-msg','Inserisci almeno la data di inizio.','err'); return; }
+  try{
+    const righe = [];
+    let tuttoOk = true;
+    for(const a of carrello){
+      const qs = new URLSearchParams({tipo:a.tipo,data_inizio:f.data_inizio,data_fine:f.data_fine||f.data_inizio,ora_inizio:f.ora_inizio,ora_fine:f.ora_fine});
+      const d = await jget('/api/disponibilita?'+qs);
+      const ok = d.disponibili.length >= a.quantita;
+      if(!ok) tuttoOk = false;
+      righe.push(`${ok?'✅':'🔴'} ${a.quantita}× ${a.tipo} — liberi ${d.disponibili.length}/${d.totale}`);
+    }
+    const per = `dal ${fmtData(f.data_inizio)} al ${fmtData(f.data_fine||f.data_inizio)}`;
+    msg('form-msg', `Disponibilità ${per}:\n`+righe.join('\n'), tuttoOk?'ok':'info');
+  }catch(e){ msg('form-msg', e.message, 'err'); }
+}
+
+async function prenota(){
+  const f = leggiCondivisi();
+
+  // Validazioni campi obbligatori
+  const errori = [];
+  if(!carrello.length) errori.push("Aggiungi almeno un articolo alla lista");
+  if(!f.data_inizio) errori.push("Data inizio è obbligatoria");
+  if(!f.prenotato_da) errori.push("Chi prenota è obbligatorio");
+  if(!f.progetto) errori.push("Nome del progetto è obbligatorio");
+
+  if(errori.length > 0){
+    msg('form-msg', '⚠️ Errori:\n' + errori.map(e=>'• '+e).join('\n'), 'err');
+    return;
+  }
+
+  // Guardia: blocca se un articolo supera la disponibilità (oltre al pulsante disabilitato)
+  if(carrello.some(a=>statoArticolo(a).over)){
+    msg('form-msg','Riduci le quantità: alcuni articoli superano la disponibilità nel periodo.','err'); return;
+  }
+  try{
+    const payload = {...f, articoli: carrello.map(a=>({tipo:a.tipo, quantita:a.quantita}))};
+    const r = await fetch(API+'/api/prenotazioni',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.detail||r.status);
+    const righe = data.articoli.map(a=>`   • ${a.quantita}× ${a.tipo} → ${a.assegnati.map(p=>p.codice).join(', ')}`);
+    msg('form-msg', `✅ Prenotato (id ${data.gruppo_id}) — ${data.totale_pezzi} pezzi:\n`+righe.join('\n'), 'ok');
+    carrello = []; renderCarrello();
+    await ricarica();
+  }catch(e){ msg('form-msg', e.message, 'err'); }
+}
+
+// ---------- Calendario ----------
+function cambiaMese(delta){ calDate.setMonth(calDate.getMonth()+delta); renderCalendario(); }
+
+function renderCalendario(){
+  const anno = calDate.getFullYear(), mese = calDate.getMonth();
+  const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  document.getElementById('cal-label').textContent = `${MESI[mese]} ${anno}`;
+  const primo = new Date(anno,mese,1);
+  const giorniMese = new Date(anno,mese+1,0).getDate();
+  let startDow = (primo.getDay()+6)%7; // lun=0
+  const oggi = new Date();
+
+  const DOW = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  let html = DOW.map(d=>`<div class="dow">${d}</div>`).join('');
+  for(let i=0;i<startDow;i++) html += '<div class="day empty"></div>';
+
+  for(let g=1; g<=giorniMese; g++){
+    const iso = `${anno}-${String(mese+1).padStart(2,'0')}-${String(g).padStart(2,'0')}`;
+    const eventi = prenotazioni.filter(p => p.data_inizio<=iso && p.data_fine>=iso);
+    const isToday = oggi.getFullYear()===anno && oggi.getMonth()===mese && oggi.getDate()===g;
+    html += `<div class="day ${isToday?'today':''}">
+      <div class="num">${g}</div>
+      ${eventi.slice(0,3).map(e=>`<div class="ev" onclick="apriDettaglio('${e.gruppo_id}')" title="${(e.progetto||e.prenotato_da||'')} · clicca per dettagli">${e.progetto||e.prenotato_da||'prenot.'}</div>`).join('')}
+      ${eventi.length>3?`<div class="ev" onclick="apriGiorno('${anno}-${String(mese+1).padStart(2,'0')}-${String(g).padStart(2,'0')}')">+${eventi.length-3}</div>`:''}
+    </div>`;
+  }
+  document.getElementById('calendario').innerHTML = html;
+}
+
+// ---------- Lista prenotazioni ----------
+function renderLista(){
+  const cont = document.getElementById('lista-pren');
+  if(!prenotazioni.length){ cont.innerHTML='<div class="empty-state">Nessuna prenotazione.</div>'; return; }
+  cont.innerHTML = prenotazioni.map(p=>{
+    let periodo = `${fmtData(p.data_inizio)} → ${fmtData(p.data_fine)}`;
+    if(p.ora_inizio) periodo += ` (${p.ora_inizio}–${p.ora_fine||''})`;
+    // Mostra ogni pezzo come "Tipo (codice)" invece del solo codice.
+    const dettaglio = (p.pezzi && p.pezzi.length)
+      ? p.pezzi.map(x=>`${x.tipo} <span class="cod">(${x.codice})</span>`).join(', ')
+      : p.codici;
+    return `<div class="pren">
+      <div class="top">
+        <span class="proj" style="cursor:pointer" onclick="apriDettaglio('${p.gruppo_id}')">${p.progetto||p.prenotato_da||'Senza nome'}</span>
+        <button class="danger" onclick="cancella('${p.gruppo_id}')">Cancella</button>
+      </div>
+      <div class="meta">📅 ${periodo}${p.prenotato_da?` · 👤 ${p.prenotato_da}`:''} · <span style="color:#666">id ${p.gruppo_id}</span></div>
+      <div class="codes">${p.n_pezzi} pezzi: ${dettaglio}</div>
+    </div>`;
+  }).join('');
+}
+
+async function cancella(gid){
+  if(!confirm('Cancellare questa prenotazione?')) return;
+  try{
+    const r = await fetch(API+'/api/prenotazioni/'+gid,{method:'DELETE'});
+    if(!r.ok) throw new Error((await r.json()).detail);
+    await ricarica();
+  }catch(e){ alert('Errore: '+e.message); }
+}
+
+async function ricarica(){
+  const pren = await jget('/api/prenotazioni');
+  prenotazioni = pren.data;
+  renderCalendario(); renderLista();
+}
+
+// ---------- Modale dettaglio prenotazione ----------
+function apriDettaglio(gid){
+  const p = prenotazioni.find(x=>x.gruppo_id===gid);
+  if(!p) return;
+
+  let periodo = `${fmtData(p.data_inizio)} → ${fmtData(p.data_fine)}`;
+  if(p.ora_inizio) periodo += `  ·  ${p.ora_inizio}–${p.ora_fine||''}`;
+
+  // Pezzi raggruppati per tipo (con codice + nome reale dall'inventario)
+  const gruppiTipo = {};
+  (p.pezzi||[]).forEach(x=>{ (gruppiTipo[x.tipo]=gruppiTipo[x.tipo]||[]).push(x); });
+  const pezziHtml = Object.keys(gruppiTipo).map(tipo=>{
+    const arr = gruppiTipo[tipo];
+    const righe = arr.map(x=>`<div class="prow">${x.nome||'(senza nome)'} <span class="cod">(${x.codice})</span></div>`).join('');
+    return `<div class="pgrp"><div class="ptit">${arr.length}× ${tipo}</div>${righe}</div>`;
+  }).join('');
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <h3>${p.progetto || 'Prenotazione senza nome'}</h3>
+        <div class="sub">id ${p.gruppo_id}</div>
+      </div>
+      <button class="x" onclick="chiudiDettaglio()" title="Chiudi">×</button>
+    </div>
+    <div class="grid">
+      <div class="field"><div class="k">Periodo</div><div class="v">📅 ${periodo}</div></div>
+      <div class="field"><div class="k">Chi prenota</div><div class="v">👤 ${p.prenotato_da||'—'}</div></div>
+      <div class="field"><div class="k">Pezzi totali</div><div class="v">${p.n_pezzi}</div></div>
+      <div class="field"><div class="k">Creata il</div><div class="v">${p.creato_il ? p.creato_il.replace('T',' ') : '—'}</div></div>
+    </div>
+    ${p.note ? `<div class="field"><div class="k">Note</div><div class="v">${p.note}</div></div>` : ''}
+    <div class="sezione-tit">Attrezzatura prenotata</div>
+    ${pezziHtml || '<div class="v">—</div>'}
+    <div class="azioni">
+      <button class="ghost" onclick="chiudiDettaglio()">Chiudi</button>
+      <button class="danger" style="padding:10px 16px;font-size:14px" onclick="cancellaDaModal('${p.gruppo_id}')">🗑️ Cancella prenotazione</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function chiudiDettaglio(){ document.getElementById('modal-overlay').classList.remove('show'); }
+
+async function cancellaDaModal(gid){
+  if(!confirm('Cancellare questa prenotazione?')) return;
+  try{
+    const r = await fetch(API+'/api/prenotazioni/'+gid,{method:'DELETE'});
+    if(!r.ok) throw new Error((await r.json()).detail);
+    chiudiDettaglio();
+    await ricarica();
+  }catch(e){ alert('Errore: '+e.message); }
+}
+
+// "+N" su un giorno affollato: porta alla lista completa in basso
+function apriGiorno(iso){
+  document.getElementById('lista-pren').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// Chiudi la modale con il tasto Esc
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') chiudiDettaglio(); });
+
+// ---------- Avvio ----------
+// Inizializza datepicker con Flatpickr
+const today = new Date();
+flatpickr('#f-dal', {
+  locale: 'it',
+  dateFormat: 'dd/mm/Y',
+  defaultDate: today,
+  minDate: today,
+  onChange: () => validaCarrello()
+});
+flatpickr('#f-al', {
+  locale: 'it',
+  dateFormat: 'dd/mm/Y',
+  defaultDate: today,
+  minDate: today,
+  onChange: () => validaCarrello()
+});
+
+// Ri-valida il carrello quando cambia il periodo; aggiorna il max al cambio tipo.
+['f-dal','f-al','f-oin','f-ofin'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el && !el.classList.contains('flatpickr-input')) {
+    el.addEventListener('change', validaCarrello);
+  }
+});
+document.getElementById('f-tipo').addEventListener('change', aggiornaMaxQta);
+
+renderCarrello();
+caricaTutto().catch(e=>{ document.getElementById('inventario').innerHTML = `<div class="msg err">Errore di connessione: ${e.message}<br>Avvia il backend con ./start.sh</div>`; });
+</script>
+</body>
+</html>

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VideoBot – Assistente Produzione</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f13;
+      color: #e8e8ee;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: #1a1a24;
+      border-bottom: 1px solid #2a2a3a;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    header h1 { font-size: 17px; font-weight: 600; color: #fff; }
+    header p  { font-size: 12px; color: #888; }
+    .status-dot {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #888;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    /* Chat area */
+    #chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+
+    /* Bubble base */
+    .bubble-wrap {
+      display: flex;
+      gap: 10px;
+      max-width: 720px;
+      width: 100%;
+    }
+    .bubble-wrap.user  { align-self: flex-end; flex-direction: row-reverse; }
+    .bubble-wrap.assistant { align-self: flex-start; }
+
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #2a2a3a;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .bubble-wrap.user .avatar {
+      background: linear-gradient(135deg, #6c63ff, #a855f7);
+    }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.55;
+      font-size: 14.5px;
+      max-width: calc(100% - 44px);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .bubble-wrap.user .bubble {
+      background: #6c63ff;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .bubble-wrap.assistant .bubble {
+      background: #1e1e2e;
+      border: 1px solid #2a2a3a;
+      border-bottom-left-radius: 4px;
+    }
+
+    /* Typing indicator */
+    .typing .bubble {
+      display: flex; gap: 5px; align-items: center;
+      padding: 14px 18px;
+    }
+    .typing-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #888;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: .2s; }
+    .typing-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30%           { transform: translateY(-6px); }
+    }
+
+    /* Input area */
+    #input-area {
+      background: #1a1a24;
+      border-top: 1px solid #2a2a3a;
+      padding: 16px;
+      flex-shrink: 0;
+    }
+    .input-row {
+      display: flex;
+      gap: 10px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    #user-input {
+      flex: 1;
+      background: #0f0f13;
+      border: 1px solid #2a2a3a;
+      border-radius: 12px;
+      color: #e8e8ee;
+      font-size: 14px;
+      padding: 12px 16px;
+      resize: none;
+      min-height: 48px;
+      max-height: 160px;
+      outline: none;
+      transition: border-color .2s;
+      font-family: inherit;
+    }
+    #user-input:focus { border-color: #6c63ff; }
+    #user-input::placeholder { color: #555; }
+
+    #send-btn {
+      background: #6c63ff;
+      border: none;
+      border-radius: 12px;
+      width: 48px; height: 48px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .2s, transform .1s;
+      flex-shrink: 0;
+    }
+    #send-btn:hover:not(:disabled) { background: #7c73ff; }
+    #send-btn:active:not(:disabled) { transform: scale(.95); }
+    #send-btn:disabled { background: #333; cursor: not-allowed; }
+    #send-btn svg { width: 20px; height: 20px; fill: #fff; }
+
+    /* Chips suggerimento */
+    .suggestions {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      max-width: 720px; margin: 0 auto 12px;
+    }
+    .chip {
+      background: #1e1e2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12.5px;
+      color: #aaa;
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+    }
+    .chip:hover { border-color: #6c63ff; color: #c4bfff; }
+
+    /* Scrollbar */
+    #chat-container::-webkit-scrollbar { width: 4px; }
+    #chat-container::-webkit-scrollbar-track { background: transparent; }
+    #chat-container::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎬</div>
+  <div>
+    <h1>VideoBot</h1>
+    <p>Assistente produzione video & podcast</p>
+  </div>
+  <div class="status-dot">
+    <div class="dot"></div>
+    <span>llama3.1 · locale</span>
+  </div>
+</header>
+
+<div id="chat-container"></div>
+
+<div id="input-area">
+  <div class="suggestions" id="suggestions">
+    <div class="chip" onclick="sendChip(this)">Quanto costa produrre un podcast?</div>
+    <div class="chip" onclick="sendChip(this)">Quante telecamere servono per 3 persone?</div>
+    <div class="chip" onclick="sendChip(this)">Prenota lo studio per il 20/07/2025 alle 10:00</div>
+    <div class="chip" onclick="sendChip(this)">Trova un montatore video</div>
+  </div>
+  <div class="input-row">
+    <textarea
+      id="user-input"
+      placeholder="Scrivi un messaggio… (Invio per inviare, Shift+Invio per a-capo)"
+      rows="1"
+    ></textarea>
+    <button id="send-btn" onclick="sendMessage()" title="Invia">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const chatContainer = document.getElementById('chat-container');
+  const userInput     = document.getElementById('user-input');
+  const sendBtn       = document.getElementById('send-btn');
+  const suggestions   = document.getElementById('suggestions');
+
+  // Cronologia locale
+  let history = [];
+
+  // Messaggio di benvenuto
+  appendBubble('assistant', '👋 Ciao! Sono **VideoBot**, il tuo assistente per la produzione video e podcast.\n\nPosso aiutarti a:\n• Stimare i costi di produzione\n• Calcolare l\'attrezzatura necessaria\n• Trovare professionisti nel nostro database\n• Prenotare lo studio\n\nDa dove vuoi iniziare?');
+
+  // Auto-resize textarea
+  userInput.addEventListener('input', () => {
+    userInput.style.height = 'auto';
+    userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+  });
+
+  // Invio con Enter
+  userInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  function sendChip(el) {
+    userInput.value = el.textContent;
+    suggestions.style.display = 'none';
+    sendMessage();
+  }
+
+  async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text || sendBtn.disabled) return;
+
+    // Nasconde i chip dopo il primo messaggio
+    suggestions.style.display = 'none';
+
+    appendBubble('user', text);
+    history.push({ role: 'user', content: text });
+
+    userInput.value = '';
+    userInput.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    const typingEl = showTyping();
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      removeTyping(typingEl);
+      appendBubble('assistant', data.reply);
+      history.push({ role: 'assistant', content: data.reply });
+
+    } catch (err) {
+      removeTyping(typingEl);
+      appendBubble('assistant', `⚠️ Errore di connessione: ${err.message}\n\nAssicurati che il backend sia avviato con:\n  uvicorn main:app --reload`);
+    } finally {
+      sendBtn.disabled = false;
+      userInput.focus();
+    }
+  }
+
+  function appendBubble(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = `bubble-wrap ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = role === 'user' ? '👤' : '🎬';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    // Rendering minimale markdown (bold e a-capo)
+    bubble.innerHTML = text
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+
+    wrap.appendChild(avatar);
+    wrap.appendChild(bubble);
+    chatContainer.appendChild(wrap);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return wrap;
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bubble-wrap assistant typing';
+    wrap.innerHTML = `
+      <div class="avatar">🎬</div>
+      <div class="bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>`;
+    chatContainer.appendChild(wrap);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return wrap;
+  }
+
+  function removeTyping(el) {
+    el?.remove();
+  }
+</script>
+</body>
+</html>
